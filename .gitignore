@@ -1,0 +1,281 @@
+# Visual Studio 生成的文件
+bin/
+obj/
+out/
+
+# Visual Studio 用户特定文件
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# 用户特定文件（MonoDevelop/Xamarin Studio）
+*.userprefs
+
+# Mono 自动生成的文件
+mono_crash.*
+
+# 构建结果
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio 2015/2017 缓存/选项目录
+.vs/
+# 取消注释下面一行，如果您有使用它的任务
+#.vscode/
+
+# MSTest 测试结果
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+# NUnit
+*.VisualState.xml
+TestResult.xml
+nunit-*.xml
+
+# 构建结果的 .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# StyleCop
+StyleCopReport.xml
+
+# 由 DocProject 创建的文件
+DocProject/buildhelp/
+DocProject/Help/*.HxT
+DocProject/Help/*.HxC
+DocProject/Help/Html2
+DocProject/Help/html
+
+# Click-Once 目录
+publish/
+
+# Publish Web Output
+*.[Pp]ublish.xml
+*.azurePubxml
+# 注意：注释下一行，如果您想要检入您的 Web 部署设置，
+# 但数据库连接字符串（及其他敏感信息）将不被加密
+*.pubxml
+*.publishproj
+
+# Microsoft Azure Web App 发布设置。注释下一行，如果您想要
+# 检入您的 Azure Web App 发布设置，但敏感信息包含在这些脚本中将被加密
+PublishScripts/
+
+# NuGet 包
+*.nupkg
+# NuGet Symbol 包
+*.snupkg
+# NuGet 包文件夹被排除，因为它们将在需要时被恢复
+**/[Pp]ackages/*
+# 除了 build/，它被用作 MSBuild 目标。
+!**/[Pp]ackages/build/
+# 取消注释，如果有必要
+#!**/[Pp]ackages/repositories.config
+# NuGet v3 的 project.json 文件产生更多可忽略的文件
+*.nuget.props
+*.nuget.targets
+
+# Microsoft Azure 构建输出
+csx/
+*.build.csdef
+
+# Microsoft Azure 模拟器
+ecf/
+rcf/
+
+# Windows Store 应用包目录和文件
+AppPackages/
+BundleArtifacts/
+Package.StoreAssociation.xml
+_pkginfo.txt
+*.appx
+*.appxbundle
+*.appxupload
+
+# Visual Studio 缓存文件
+# 以 "2" 结尾的文件是 Visual Studio MRU 缓存
+*.cache
+# 但保留 track.exe 的目录，它们被用于 MSBuild 增量构建
+!?*.[Cc]ache/
+
+# Visual Studio 分析器
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# Visual Studio Trace 文件
+*.e2e
+
+# TFS 2012 本地工作区
+$tf/
+
+# 自动备份文件
+_UpgradeReport_Files/
+Backup*/
+UpgradeLog*.XML
+UpgradeLog*.htm
+ServiceFabricBackup/
+*.rptproj.bak
+
+# SQL Server 文件
+*.mdf
+*.ldf
+*.ndf
+
+# 业务智能项目
+*.rdl.data
+*.bim.layout
+*.bim_*.settings
+*.rptproj.rsuser
+*- [Bb]ackup.rdl
+*- [Bb]ackup ([0-9]).rdl
+*- [Bb]ackup ([0-9][0-9]).rdl
+
+# Microsoft Fakes
+FakesAssemblies/
+
+# GhostDoc 插件设置文件
+*.GhostDoc.xml
+
+# Node.js 工具 for Visual Studio
+.ntvs_analysis.dat
+node_modules/
+
+# Visual Studio 6 构建日志
+*.plg
+
+# Visual Studio 6 工作区选项文件
+*.opt
+
+# Visual Studio 6 自动生成的工作区文件（包含哪些文件）
+*.vbw
+
+# Visual Studio LightSwitch 构建输出
+**/*.HTMLClient/GeneratedArtifacts
+**/*.DesktopClient/GeneratedArtifacts
+**/*.DesktopClient/ModelManifest.xml
+**/*.Server/GeneratedArtifacts
+**/*.Server/ModelManifest.xml
+_Pvt_Extensions
+
+# Paket 依赖管理器
+.paket/paket.exe
+paket-files/
+
+# FAKE - F# Make
+.fake/
+
+# CodeRush 个人设置
+.cr/personal
+
+# Python 工具 for Visual Studio (PTVS)
+__pycache__/
+*.pyc
+
+# Cake - 取消注释，如果您正在使用它
+# tools/**
+# !tools/packages.config
+
+# Tabs Studio
+*.tss
+
+# Telerik's JustMock 配置文件
+*.jmconfig
+
+# BizTalk 构建输出
+*.btp.cs
+*.btm.cs
+*.odx.cs
+*.xsd.cs
+
+# OpenCover UI 分析结果
+OpenCover/
+
+# Azure Stream Analytics 本地运行输出
+ASALocalRun/
+
+# MSBuild 二进制和结构化日志
+*.binlog
+
+# NVidia Nsight GPU 调试器配置文件
+*.nvuser
+
+# MFractors (Xamarin 生产力工具) 工作文件夹
+.mfractor/
+
+# 本地历史 for Visual Studio
+.localhistory/
+
+# BeatPulse 健康检查临时数据库
+healthchecksdb
+
+# 备份文件夹 for Package Reference Convert 工具 in Visual Studio 2017
+MigrationBackup/
+
+# Ionide (F# VS Code 工具) 工作文件夹
+.ionide/
+
+# Fody - 自动生成的 XML 模式
+FodyWeavers.xsd
+
+# 项目特定忽略
+*.tmp
+*.bak
+result.md
+test_images/
+output/
+logs/
+temp/
+
+# 图像文件（如果不需要版本控制）
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.tiff
+*.tif
+*.dcm
+*.dic
+*.acr
+
+# 配置文件（包含敏感信息）
+appsettings.local.json
+*.config.local
+
+# IDE 特定文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统生成的文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+*__gen.go
+*__ignore.go
+~i_*
+ig_*
+zzzig_*
