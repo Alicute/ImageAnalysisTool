@@ -88,6 +88,7 @@ namespace ImageAnalysisTool.UI.Forms
         private Chart originalPixelMappingChart;
         private RichTextBox originalAnalysisTextBox;
         private RichTextBox originalGrayValueAnalysisTextBox;
+        private RichTextBox originalAISummaryTextBox;
 
         // 增强图1列控件
         private Label enhancedLabel;
@@ -95,6 +96,7 @@ namespace ImageAnalysisTool.UI.Forms
         private Chart enhanced1PixelMappingChart;
         private RichTextBox enhanced1AnalysisTextBox;
         private RichTextBox enhanced1GrayValueAnalysisTextBox;
+        private RichTextBox enhanced1AISummaryTextBox;
 
         // 增强图2列控件
         private Label enhanced2Label;
@@ -102,6 +104,7 @@ namespace ImageAnalysisTool.UI.Forms
         private Chart enhanced2PixelMappingChart;
         private RichTextBox enhanced2AnalysisTextBox;
         private RichTextBox enhanced2GrayValueAnalysisTextBox;
+        private RichTextBox enhanced2AISummaryTextBox;
 
         // 保留旧的控件引用（兼容性）
         private Chart histogramChart;
@@ -196,7 +199,7 @@ namespace ImageAnalysisTool.UI.Forms
             mainLayout = new TableLayoutPanel
             {
                 Location = new System.Drawing.Point(0, 0),
-                Size = new System.Drawing.Size(1580, 1400),  // 增加高度以容纳更多内容
+                Size = new System.Drawing.Size(1580, 2000),  // 再次增加高度以容纳AI分析总结行
                 ColumnCount = 3,  // 3列：原图、增强图1、增强图2
                 RowCount = 2      // 2行：顶部控制、3列内容
             };
@@ -253,17 +256,18 @@ namespace ImageAnalysisTool.UI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 6,  // 增加到6行
+                RowCount = 7,  // 增加到7行
                 AutoSize = true
             };
 
-            // 设置行样式
+            // 设置行样式（使用绝对高度，让列变得更长）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));   // 标题
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));    // 图像
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 直方图
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 像素映射
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));    // 分析结果
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 10F));    // 灰度值分析
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 图像
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 直方图
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 像素映射
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 分析结果（增大）
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 250F));  // 灰度值分析（增大）
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 智能分析总结（新增）
 
             // 创建标题标签
             originalLabel = new Label
@@ -307,6 +311,16 @@ namespace ImageAnalysisTool.UI.Forms
                 BackColor = Color.LightYellow
             };
 
+            // 创建AI分析总结文本框
+            originalAISummaryTextBox = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                Font = new Font("Consolas", 9),
+                BackColor = Color.LightCyan,
+                Text = "AI分析数据摘要将在这里显示...\n\n点击'对比分析'后生成结构化数据，可复制给AI进行深度分析。"
+            };
+
             // 添加到列布局
             columnLayout.Controls.Add(originalLabel, 0, 0);
             columnLayout.Controls.Add(originalPictureBox, 0, 1);
@@ -314,6 +328,7 @@ namespace ImageAnalysisTool.UI.Forms
             columnLayout.Controls.Add(originalPixelMappingChart, 0, 3);
             columnLayout.Controls.Add(originalAnalysisTextBox, 0, 4);
             columnLayout.Controls.Add(originalGrayValueAnalysisTextBox, 0, 5);
+            columnLayout.Controls.Add(originalAISummaryTextBox, 0, 6);
 
             originalColumnPanel.Controls.Add(columnLayout);
 
@@ -338,17 +353,17 @@ namespace ImageAnalysisTool.UI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 6,  // 增加到6行
+                RowCount = 7,  // 增加到7行
                 AutoSize = true
             };
 
-            // 设置行样式
+            // 设置行样式（使用绝对高度，让列变得更长）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));   // 标题
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));    // 图像
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 直方图
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 像素映射
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));    // 分析结果
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 10F));    // 灰度值分析
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 图像
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 直方图
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 像素映射
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 分析结果（增大）
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 250F));  // 灰度值分析（增大）
 
             // 创建标题标签
             enhancedLabel = new Label
@@ -392,6 +407,16 @@ namespace ImageAnalysisTool.UI.Forms
                 BackColor = Color.LightYellow
             };
 
+            // 创建AI分析总结文本框
+            enhanced1AISummaryTextBox = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                Font = new Font("Consolas", 9),
+                BackColor = Color.LightCyan,
+                Text = "AI分析数据摘要将在这里显示...\n\n点击'对比分析'后生成结构化数据，可复制给AI进行深度分析。"
+            };
+
             // 添加到列布局
             columnLayout.Controls.Add(enhancedLabel, 0, 0);
             columnLayout.Controls.Add(enhancedPictureBox, 0, 1);
@@ -399,6 +424,7 @@ namespace ImageAnalysisTool.UI.Forms
             columnLayout.Controls.Add(enhanced1PixelMappingChart, 0, 3);
             columnLayout.Controls.Add(enhanced1AnalysisTextBox, 0, 4);
             columnLayout.Controls.Add(enhanced1GrayValueAnalysisTextBox, 0, 5);
+            columnLayout.Controls.Add(enhanced1AISummaryTextBox, 0, 6);
 
             enhanced1ColumnPanel.Controls.Add(columnLayout);
 
@@ -423,17 +449,17 @@ namespace ImageAnalysisTool.UI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 6,  // 增加到6行
+                RowCount = 7,  // 增加到7行
                 AutoSize = true
             };
 
-            // 设置行样式
+            // 设置行样式（使用绝对高度，让列变得更长）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));   // 标题
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));    // 图像
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 直方图
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 像素映射
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));    // 分析结果
-            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 10F));    // 灰度值分析
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 图像
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 直方图
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 像素映射
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 分析结果（增大）
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 250F));  // 灰度值分析（增大）
 
             // 创建标题标签
             enhanced2Label = new Label
@@ -477,6 +503,16 @@ namespace ImageAnalysisTool.UI.Forms
                 BackColor = Color.LightYellow
             };
 
+            // 创建AI分析总结文本框
+            enhanced2AISummaryTextBox = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                Font = new Font("Consolas", 9),
+                BackColor = Color.LightCyan,
+                Text = "AI分析数据摘要将在这里显示...\n\n点击'对比分析'后生成结构化数据，可复制给AI进行深度分析。"
+            };
+
             // 添加到列布局
             columnLayout.Controls.Add(enhanced2Label, 0, 0);
             columnLayout.Controls.Add(enhanced2PictureBox, 0, 1);
@@ -484,6 +520,7 @@ namespace ImageAnalysisTool.UI.Forms
             columnLayout.Controls.Add(enhanced2PixelMappingChart, 0, 3);
             columnLayout.Controls.Add(enhanced2AnalysisTextBox, 0, 4);
             columnLayout.Controls.Add(enhanced2GrayValueAnalysisTextBox, 0, 5);
+            columnLayout.Controls.Add(enhanced2AISummaryTextBox, 0, 6);
 
             enhanced2ColumnPanel.Controls.Add(columnLayout);
 
@@ -660,7 +697,7 @@ namespace ImageAnalysisTool.UI.Forms
                 Text = "全图",
                 Location = new System.Drawing.Point(5, 8),
                 Size = new System.Drawing.Size(50, 20),
-                Checked = true, // 默认选择全图模式
+                
                 Font = new Font("Arial", 8)
             };
             fullImageMappingRadio.CheckedChanged += MappingModeRadio_CheckedChanged;
@@ -670,6 +707,7 @@ namespace ImageAnalysisTool.UI.Forms
                 Text = "ROI",
                 Location = new System.Drawing.Point(60, 8),
                 Size = new System.Drawing.Size(50, 20),
+                Checked = true, // 默认选择ROI模式
                 Font = new Font("Arial", 8)
             };
             roiMappingRadio.CheckedChanged += MappingModeRadio_CheckedChanged;
@@ -1075,6 +1113,9 @@ namespace ImageAnalysisTool.UI.Forms
 
                 // 显示对比分析结果（像素映射、对比报告）
                 DisplayComparisonAnalysisResults();
+
+                // 生成AI分析总结
+                GenerateAISummary();
 
                 compareBtn.Text = "重新对比";
                 compareBtn.Enabled = true;
@@ -3696,6 +3737,243 @@ namespace ImageAnalysisTool.UI.Forms
 
             // 在结果文本框中显示
             resultTextBox.Text = sb.ToString();
+        }
+
+        /// <summary>
+        /// 生成AI分析总结数据
+        /// </summary>
+        private void GenerateAISummary()
+        {
+            try
+            {
+                var comprehensiveSummary = GenerateComprehensiveAnalysisSummary();
+
+                // 三列显示相同的综合对比分析
+                if (originalAISummaryTextBox != null)
+                    originalAISummaryTextBox.Text = comprehensiveSummary;
+                if (enhanced1AISummaryTextBox != null)
+                    enhanced1AISummaryTextBox.Text = comprehensiveSummary;
+                if (enhanced2AISummaryTextBox != null)
+                    enhanced2AISummaryTextBox.Text = comprehensiveSummary;
+            }
+            catch (Exception ex)
+            {
+                var errorMsg = $"AI总结生成失败: {ex.Message}";
+                if (originalAISummaryTextBox != null)
+                    originalAISummaryTextBox.Text = errorMsg;
+                if (enhanced1AISummaryTextBox != null)
+                    enhanced1AISummaryTextBox.Text = errorMsg;
+                if (enhanced2AISummaryTextBox != null)
+                    enhanced2AISummaryTextBox.Text = errorMsg;
+            }
+        }
+
+        /// <summary>
+        /// 生成三图综合对比分析摘要，便于AI分析
+        /// </summary>
+        private string GenerateComprehensiveAnalysisSummary()
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine("=== 三图综合增强算法对比分析 ===");
+            sb.AppendLine($"分析时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"分析模式: {(roiMappingRadio?.Checked == true ? "ROI区域分析" : "全图分析")}");
+            sb.AppendLine();
+
+            // 图像基本信息
+            if (originalImage != null)
+            {
+                // 正确检测图像位数
+                bool is16Bit = originalImage.Type() == MatType.CV_16UC1 || originalImage.Type() == MatType.CV_16SC1;
+                int maxValue = is16Bit ? 65535 : 255;
+
+                sb.AppendLine("【图像基本信息】");
+                sb.AppendLine($"图像尺寸: {originalImage.Width} × {originalImage.Height}");
+                sb.AppendLine($"图像类型: {(is16Bit ? "16位" : "8位")}灰度工业图像");
+                sb.AppendLine($"像素范围: 0 - {maxValue}");
+                sb.AppendLine();
+            }
+
+            // 核心对比分析：原图 vs 增强图1 vs 增强图2
+            sb.AppendLine("【核心增强效果对比】");
+            var originalStats = ExtractStatisticsValues(originalGrayValueAnalysis);
+            var enhanced1Stats = ExtractStatisticsValues(enhanced1GrayValueAnalysis);
+            var enhanced2Stats = ExtractStatisticsValues(enhanced2GrayValueAnalysis);
+
+            if (originalStats.Count > 0 && enhanced1Stats.Count > 0 && enhanced2Stats.Count > 0)
+            {
+                sb.AppendLine("原图 → 增强图1 → 增强图2 数值变化:");
+                foreach (var key in originalStats.Keys)
+                {
+                    if (enhanced1Stats.ContainsKey(key) && enhanced2Stats.ContainsKey(key))
+                    {
+                        var orig = originalStats[key];
+                        var enh1 = enhanced1Stats[key];
+                        var enh2 = enhanced2Stats[key];
+
+                        var change1 = orig > 0 ? ((enh1 - orig) / orig * 100) : 0;
+                        var change2 = orig > 0 ? ((enh2 - orig) / orig * 100) : 0;
+
+                        sb.AppendLine($"{key}: {orig:F1} → {enh1:F1}({change1:+0.0;-0.0;0}%) → {enh2:F1}({change2:+0.0;-0.0;0}%)");
+                    }
+                }
+            }
+            sb.AppendLine();
+
+            // 算法策略差异分析
+            sb.AppendLine("【算法策略差异分析】");
+            sb.AppendLine(AnalyzeAlgorithmDifferences(originalStats, enhanced1Stats, enhanced2Stats));
+            sb.AppendLine();
+
+            // 增强效果评估
+            sb.AppendLine("【增强效果评估】");
+            sb.AppendLine(EvaluateEnhancementEffectiveness(originalStats, enhanced1Stats, enhanced2Stats));
+            sb.AppendLine();
+
+            // AI分析建议
+            sb.AppendLine("【复制给AI进行深度分析】");
+            sb.AppendLine("请将以上完整数据复制给AI，可以询问:");
+            sb.AppendLine("1. '分析这两种工业图像增强算法的技术原理差异'");
+            sb.AppendLine("2. '评估哪种算法更适合工业缺陷检测，为什么？'");
+            sb.AppendLine("3. '基于数据分析，如何进一步优化这些算法？'");
+            sb.AppendLine("4. '在什么工业检测场景下应该选择哪种算法？'");
+            sb.AppendLine("5. '这些数值变化反映了什么样的图像处理策略？'");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 提取统计数值到字典
+        /// </summary>
+        private Dictionary<string, double> ExtractStatisticsValues(string analysis)
+        {
+            var stats = new Dictionary<string, double>();
+            if (string.IsNullOrEmpty(analysis)) return stats;
+
+            var lines = analysis.Split('\n');
+            foreach (var line in lines)
+            {
+                if (line.Contains("平均值:"))
+                {
+                    var value = ExtractNumericValue(line);
+                    if (value.HasValue) stats["平均值"] = value.Value;
+                }
+                else if (line.Contains("最小值:"))
+                {
+                    var value = ExtractNumericValue(line);
+                    if (value.HasValue) stats["最小值"] = value.Value;
+                }
+                else if (line.Contains("最大值:"))
+                {
+                    var value = ExtractNumericValue(line);
+                    if (value.HasValue) stats["最大值"] = value.Value;
+                }
+                else if (line.Contains("动态范围:"))
+                {
+                    var value = ExtractNumericValue(line);
+                    if (value.HasValue) stats["动态范围"] = value.Value;
+                }
+            }
+
+            return stats;
+        }
+
+        /// <summary>
+        /// 从文本行中提取数值
+        /// </summary>
+        private double? ExtractNumericValue(string line)
+        {
+            var parts = line.Split(':');
+            if (parts.Length > 1)
+            {
+                var valueStr = parts[1].Trim().Split(' ')[0]; // 取第一个数字部分
+                if (double.TryParse(valueStr, out double value))
+                {
+                    return value;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 分析像素映射特征
+        /// </summary>
+        private string AnalyzePixelMappingCharacteristics(string algorithmType)
+        {
+            // 这里可以基于像素映射图的数据特征进行分析
+            // 简化版本，实际可以更复杂
+            if (algorithmType == "enhanced1")
+            {
+                return "暗部大幅提亮，亮部适度压缩，整体向中间集中";
+            }
+            else
+            {
+                return "全局提亮，保持动态范围，对比度增强";
+            }
+        }
+
+        /// <summary>
+        /// 分析算法差异
+        /// </summary>
+        private string AnalyzeAlgorithmDifferences(Dictionary<string, double> original, Dictionary<string, double> enhanced1, Dictionary<string, double> enhanced2)
+        {
+            var sb = new StringBuilder();
+
+            if (original.TryGetValue("平均值", out double origAvg) &&
+                enhanced1.TryGetValue("平均值", out double enh1Avg) &&
+                enhanced2.TryGetValue("平均值", out double enh2Avg))
+            {
+                var change1 = ((enh1Avg - origAvg) / origAvg * 100);
+                var change2 = ((enh2Avg - origAvg) / origAvg * 100);
+
+                sb.AppendLine($"算法1策略: 平均值变化{change1:+0.0;-0.0;0}% - {(change1 > 100 ? "激进提亮" : change1 > 50 ? "显著提亮" : "温和调整")}");
+                sb.AppendLine($"算法2策略: 平均值变化{change2:+0.0;-0.0;0}% - {(change2 > 100 ? "激进提亮" : change2 > 50 ? "显著提亮" : "温和调整")}");
+            }
+
+            if (original.TryGetValue("动态范围", out double origRange) &&
+                enhanced1.TryGetValue("动态范围", out double enh1Range) &&
+                enhanced2.TryGetValue("动态范围", out double enh2Range))
+            {
+                var rangeChange1 = ((enh1Range - origRange) / origRange * 100);
+                var rangeChange2 = ((enh2Range - origRange) / origRange * 100);
+
+                sb.AppendLine($"算法1对比度: {(rangeChange1 > 0 ? "扩展" : "压缩")}动态范围{Math.Abs(rangeChange1):F1}%");
+                sb.AppendLine($"算法2对比度: {(rangeChange2 > 0 ? "扩展" : "压缩")}动态范围{Math.Abs(rangeChange2):F1}%");
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 评估增强效果
+        /// </summary>
+        private string EvaluateEnhancementEffectiveness(Dictionary<string, double> original, Dictionary<string, double> enhanced1, Dictionary<string, double> enhanced2)
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine("基于数值变化的效果评估:");
+
+            // 评估算法1
+            if (original.TryGetValue("最小值", out double origMin1) && enhanced1.TryGetValue("最小值", out double enh1Min))
+            {
+                var minChange1 = ((enh1Min - origMin1) / origMin1 * 100);
+                sb.AppendLine($"算法1: 暗部提升{minChange1:F0}% - {(minChange1 > 500 ? "极强" : minChange1 > 200 ? "很强" : minChange1 > 100 ? "较强" : "一般")}暗部增强");
+            }
+
+            // 评估算法2
+            if (original.TryGetValue("最小值", out double origMin2) && enhanced2.TryGetValue("最小值", out double enh2Min))
+            {
+                var minChange2 = ((enh2Min - origMin2) / origMin2 * 100);
+                sb.AppendLine($"算法2: 暗部提升{minChange2:F0}% - {(minChange2 > 500 ? "极强" : minChange2 > 200 ? "很强" : minChange2 > 100 ? "较强" : "一般")}暗部增强");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("工业影像应用建议:");
+            sb.AppendLine("- 缺陷检测: 选择暗部增强更强的算法");
+            sb.AppendLine("- 质量检测: 选择动态范围保持更好的算法");
+            sb.AppendLine("- 尺寸测量: 考虑像素值变化对测量精度的影响");
+
+            return sb.ToString();
         }
     }
 }
