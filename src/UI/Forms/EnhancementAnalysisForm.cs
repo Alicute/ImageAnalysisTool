@@ -3607,15 +3607,15 @@ namespace ImageAnalysisTool.UI.Forms
             // 计算综合评分
             var result1 = enhanced1AnalysisResult.Value;
             result1.ROITechnicalScore = CalculateImageQualityScore(result1.ROIQualityMetrics);
-            result1.ROIMedicalScore = result1.ROIMedicalMetrics.OverallMedicalQuality;
-            result1.ROIDetectionScore = result1.ROIDetectionMetrics.OverallSuitability;
+            result1.ROIMedicalScore = double.IsNaN(result1.ROIMedicalMetrics.OverallMedicalQuality) ? 0 : result1.ROIMedicalMetrics.OverallMedicalQuality;
+            result1.ROIDetectionScore = double.IsNaN(result1.ROIDetectionMetrics.OverallSuitability) ? 0 : result1.ROIDetectionMetrics.OverallSuitability;
             result1.ROIOverallRecommendation = (result1.ROITechnicalScore + result1.ROIMedicalScore + result1.ROIDetectionScore) / 3.0;
             enhanced1AnalysisResult = result1;
 
             var result2 = enhanced2AnalysisResult.Value;
             result2.ROITechnicalScore = CalculateImageQualityScore(result2.ROIQualityMetrics);
-            result2.ROIMedicalScore = result2.ROIMedicalMetrics.OverallMedicalQuality;
-            result2.ROIDetectionScore = result2.ROIDetectionMetrics.OverallSuitability;
+            result2.ROIMedicalScore = double.IsNaN(result2.ROIMedicalMetrics.OverallMedicalQuality) ? 0 : result2.ROIMedicalMetrics.OverallMedicalQuality;
+            result2.ROIDetectionScore = double.IsNaN(result2.ROIDetectionMetrics.OverallSuitability) ? 0 : result2.ROIDetectionMetrics.OverallSuitability;
             result2.ROIOverallRecommendation = (result2.ROITechnicalScore + result2.ROIMedicalScore + result2.ROIDetectionScore) / 3.0;
             enhanced2AnalysisResult = result2;
 
@@ -3948,14 +3948,24 @@ namespace ImageAnalysisTool.UI.Forms
             if (analysisResult.HasValue)
             {
                 var score = roiMappingRadio?.Checked == true ? analysisResult.Value.ROIOverallRecommendation : analysisResult.Value.FullImageOverallRecommendation;
-                if (score > 80)
-                    sb.AppendLine("✅ 算法效果优秀，建议保持当前参数");
-                else if (score > 60)
-                    sb.AppendLine("⚠️ 算法效果良好，可考虑微调参数");
-                else
-                    sb.AppendLine("❌ 算法效果需要改进，建议调整参数或更换算法");
 
-                sb.AppendLine($"综合推荐度: {score:F1}/100");
+                // 检查并处理NaN值
+                if (double.IsNaN(score) || double.IsInfinity(score))
+                {
+                    sb.AppendLine("⚠️ 评分计算异常，建议检查输入数据或算法参数");
+                    sb.AppendLine("综合推荐度: 计算异常/100");
+                }
+                else
+                {
+                    if (score > 80)
+                        sb.AppendLine("✅ 算法效果优秀，建议保持当前参数");
+                    else if (score > 60)
+                        sb.AppendLine("⚠️ 算法效果良好，可考虑微调参数");
+                    else
+                        sb.AppendLine("❌ 算法效果需要改进，建议调整参数或更换算法");
+
+                    sb.AppendLine($"综合推荐度: {score:F1}/100");
+                }
             }
 
             return sb.ToString();
