@@ -72,6 +72,11 @@ namespace ImageAnalysisTool.UI.Forms
         private ComboBox roiModeComboBox;
         private Label roiModeLabel;
 
+        // 像素映射模式控件
+        private RadioButton fullImageMappingRadio;
+        private RadioButton roiMappingRadio;
+        private Panel mappingModePanel;
+
         // 新的列式布局控件
         private Panel originalColumnPanel;
         private Panel enhanced1ColumnPanel;
@@ -620,10 +625,13 @@ namespace ImageAnalysisTool.UI.Forms
             roiModeComboBox.Items.AddRange(new object[] { "通用模式", "焊缝模式" });
             roiModeComboBox.SelectedIndex = 0; // 默认选择通用模式
 
+            // 创建像素映射模式控件
+            CreateMappingModeControls();
+
             // 添加按钮到布局
             buttonLayout.Controls.AddRange(new Control[] {
                 loadOriginalBtn, loadEnhancedBtn, loadEnhanced2Btn, analyzeBtn, compareBtn, showROIButton,
-                roiModeLabel, roiModeComboBox
+                roiModeLabel, roiModeComboBox, mappingModePanel
             });
 
             topControlPanel.Controls.Add(buttonLayout);
@@ -633,6 +641,85 @@ namespace ImageAnalysisTool.UI.Forms
             // 添加到主布局，跨3列
             mainLayout.Controls.Add(topControlPanel, 0, 0);
             mainLayout.SetColumnSpan(topControlPanel, 3);
+        }
+
+        /// <summary>
+        /// 创建像素映射模式控件
+        /// </summary>
+        private void CreateMappingModeControls()
+        {
+            mappingModePanel = new Panel
+            {
+                Size = new System.Drawing.Size(150, 35),
+                Margin = new Padding(5),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            fullImageMappingRadio = new RadioButton
+            {
+                Text = "全图",
+                Location = new System.Drawing.Point(5, 8),
+                Size = new System.Drawing.Size(50, 20),
+                Checked = true, // 默认选择全图模式
+                Font = new Font("Arial", 8)
+            };
+            fullImageMappingRadio.CheckedChanged += MappingModeRadio_CheckedChanged;
+
+            roiMappingRadio = new RadioButton
+            {
+                Text = "ROI",
+                Location = new System.Drawing.Point(60, 8),
+                Size = new System.Drawing.Size(50, 20),
+                Font = new Font("Arial", 8)
+            };
+            roiMappingRadio.CheckedChanged += MappingModeRadio_CheckedChanged;
+
+            // 添加标签
+            var modeLabel = new Label
+            {
+                Text = "映射:",
+                Location = new System.Drawing.Point(115, 8),
+                Size = new System.Drawing.Size(30, 20),
+                Font = new Font("Arial", 8),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
+            mappingModePanel.Controls.AddRange(new Control[] {
+                fullImageMappingRadio, roiMappingRadio, modeLabel
+            });
+        }
+
+        /// <summary>
+        /// 像素映射模式切换事件处理
+        /// </summary>
+        private void MappingModeRadio_CheckedChanged(object sender, EventArgs e)
+        {
+            if (sender is RadioButton radio && radio.Checked)
+            {
+                // 重新绘制所有像素映射图
+                RefreshPixelMappingCharts();
+            }
+        }
+
+        /// <summary>
+        /// 刷新所有像素映射图表
+        /// </summary>
+        private void RefreshPixelMappingCharts()
+        {
+            try
+            {
+                // 显示像素映射
+                if (originalImage != null)
+                    DisplayPixelMappingForImages(originalImage, originalImage, originalPixelMappingChart, "原图 vs 原图");
+                if (originalImage != null && enhancedImage != null)
+                    DisplayPixelMappingForImages(originalImage, enhancedImage, enhanced1PixelMappingChart, "原图 vs 增强图1");
+                if (originalImage != null && enhanced2Image != null)
+                    DisplayPixelMappingForImages(originalImage, enhanced2Image, enhanced2PixelMappingChart, "原图 vs 增强图2");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"刷新像素映射图表时出错: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -1085,12 +1172,12 @@ namespace ImageAnalysisTool.UI.Forms
         private void DisplayComparisonAnalysisResults()
         {
             // 显示像素映射
+            if (originalImage != null)
+                DisplayPixelMappingForImages(originalImage, originalImage, originalPixelMappingChart, "原图 vs 原图");
             if (originalImage != null && enhancedImage != null)
-                DisplayPixelMappingForImages(originalImage, enhancedImage, originalPixelMappingChart, "原图 vs 增强图1");
-            if (originalImage != null && enhancedImage != null)
-                DisplayPixelMappingForImages(originalImage, enhancedImage, enhanced1PixelMappingChart, "增强图1 vs 原图");
+                DisplayPixelMappingForImages(originalImage, enhancedImage, enhanced1PixelMappingChart, "原图 vs 增强图1");
             if (originalImage != null && enhanced2Image != null)
-                DisplayPixelMappingForImages(originalImage, enhanced2Image, enhanced2PixelMappingChart, "增强图2 vs 原图");
+                DisplayPixelMappingForImages(originalImage, enhanced2Image, enhanced2PixelMappingChart, "原图 vs 增强图2");
 
             // 显示对比分析报告
             DisplayComparisonReports();
@@ -1402,11 +1489,8 @@ namespace ImageAnalysisTool.UI.Forms
             // 显示原图直方图
             DisplayHistogramForImage(originalImage, originalHistogramChart, "原图");
 
-            // 显示原图像素映射（与增强图对比）
-            if (enhancedImage != null)
-            {
-                DisplayPixelMappingForImages(originalImage, enhancedImage, originalPixelMappingChart, "原图 vs 增强图1");
-            }
+            // 显示原图像素映射（原图vs原图，作为参考基准）
+            DisplayPixelMappingForImages(originalImage, originalImage, originalPixelMappingChart, "原图 vs 原图");
 
             // 显示原图分析文本
             DisplayAnalysisTextForImage(originalImage, originalAnalysisTextBox, "原图");
@@ -1420,8 +1504,8 @@ namespace ImageAnalysisTool.UI.Forms
             // 显示增强图1直方图
             DisplayHistogramForImage(enhancedImage, enhanced1HistogramChart, "增强图1");
 
-            // 显示增强图1像素映射（与原图对比）
-            DisplayPixelMappingForImages(originalImage, enhancedImage, enhanced1PixelMappingChart, "增强图1 vs 原图");
+            // 显示增强图1像素映射（原图vs增强图1）
+            DisplayPixelMappingForImages(originalImage, enhancedImage, enhanced1PixelMappingChart, "原图 vs 增强图1");
 
             // 显示增强图1分析文本
             DisplayAnalysisTextForImage(enhancedImage, enhanced1AnalysisTextBox, "增强图1");
@@ -1435,8 +1519,8 @@ namespace ImageAnalysisTool.UI.Forms
             // 显示增强图2直方图
             DisplayHistogramForImage(enhanced2Image, enhanced2HistogramChart, "增强图2");
 
-            // 显示增强图2像素映射（与原图对比）
-            DisplayPixelMappingForImages(originalImage, enhanced2Image, enhanced2PixelMappingChart, "增强图2 vs 原图");
+            // 显示增强图2像素映射（原图vs增强图2）
+            DisplayPixelMappingForImages(originalImage, enhanced2Image, enhanced2PixelMappingChart, "原图 vs 增强图2");
 
             // 显示增强图2分析文本
             DisplayAnalysisTextForImage(enhanced2Image, enhanced2AnalysisTextBox, "增强图2");
@@ -1455,7 +1539,7 @@ namespace ImageAnalysisTool.UI.Forms
                 // 检测图像位深
                 bool is16Bit = image.Type() == MatType.CV_16UC1;
                 int maxValue = is16Bit ? 65535 : 255;
-                int binCount = is16Bit ? 256 : 256; // 16位图像分组为256个bin以便显示
+                int binCount = maxValue + 1;
 
                 // 计算直方图
                 Mat hist = new Mat();
@@ -1466,18 +1550,21 @@ namespace ImageAnalysisTool.UI.Forms
                 // 创建系列
                 var series = new Series(imageName)
                 {
-                    ChartType = SeriesChartType.Line,
-                    Color = GetColorForImage(imageName),
-                    BorderWidth = 2
+                    ChartType = SeriesChartType.Column,
+                    Color = GetColorForImage(imageName)
                 };
 
-                // 添加数据点
-                double binWidth = (double)maxValue / binCount;
+                // 设置柱子宽度为100%以消除间隔，形成连续的山丘效果
+                series["PointWidth"] = "1.0";
+
+                // 添加所有数据点，但只添加有值的点以提高性能
                 for (int i = 0; i < binCount; i++)
                 {
                     float value = hist.Get<float>(i);
-                    double binCenter = (i + 0.5) * binWidth;
-                    series.Points.AddXY(binCenter, value);
+                    if (value > 0) // 只添加有数据的点
+                    {
+                        series.Points.AddXY(i, value);
+                    }
                 }
 
                 chart.Series.Add(series);
@@ -1485,17 +1572,40 @@ namespace ImageAnalysisTool.UI.Forms
                 // 设置图表区域
                 if (chart.ChartAreas.Count > 0)
                 {
-                    chart.ChartAreas[0].AxisX.Title = $"灰度值 (0-{maxValue})";
-                    chart.ChartAreas[0].AxisY.Title = "像素数量";
-                    chart.ChartAreas[0].AxisX.Minimum = 0;
-                    chart.ChartAreas[0].AxisX.Maximum = maxValue;
+                    var chartArea = chart.ChartAreas[0];
 
-                    // 设置X轴刻度，16位图像使用更少的刻度以保持可读性
+                    // 设置坐标轴标题
+                    chartArea.AxisX.Title = $"灰度值 (0-{maxValue})";
+                    chartArea.AxisY.Title = "像素数量 (对数刻度)";
+                    chartArea.AxisX.Minimum = 0;
+                    chartArea.AxisX.Maximum = maxValue;
+
+                    // 设置Y轴为对数刻度
+                    chartArea.AxisY.IsLogarithmic = true;
+                    chartArea.AxisY.LogarithmBase = 10;
+                    chartArea.AxisY.Minimum = 1; // 对数刻度最小值必须大于0
+
+                    // 启用网格线
+                    chartArea.AxisX.MajorGrid.Enabled = true;
+                    chartArea.AxisY.MajorGrid.Enabled = true;
+                    chartArea.AxisX.MajorGrid.LineColor = Color.LightGray;
+                    chartArea.AxisY.MajorGrid.LineColor = Color.LightGray;
+                    chartArea.AxisX.MajorGrid.LineDashStyle = ChartDashStyle.Solid;
+                    chartArea.AxisY.MajorGrid.LineDashStyle = ChartDashStyle.Solid;
+
+                    // 设置X轴刻度
                     if (is16Bit)
                     {
-                        chart.ChartAreas[0].AxisX.Interval = 8192; // 每8192一个刻度
-                        chart.ChartAreas[0].AxisX.LabelStyle.Format = "N0";
+                        chartArea.AxisX.Interval = 8192; // 每8192一个刻度
+                        chartArea.AxisX.LabelStyle.Format = "N0";
                     }
+                    else
+                    {
+                        chartArea.AxisX.Interval = 50; // 8位图像每50一个刻度
+                    }
+
+                    // 设置背景色
+                    chartArea.BackColor = Color.White;
                 }
 
                 // 强制刷新图表
@@ -1528,8 +1638,24 @@ namespace ImageAnalysisTool.UI.Forms
                 bool is16Bit = sourceImage.Type() == MatType.CV_16UC1;
                 int maxValue = is16Bit ? 65535 : 255;
 
-                // 收集映射数据
-                var mappingData = CollectMappingDataForCurve(sourceImage, targetImage, is16Bit);
+                // 根据当前模式收集映射数据
+                Dictionary<int, int> mappingData;
+                string modeText;
+
+                if (roiMappingRadio != null && roiMappingRadio.Checked)
+                {
+                    // ROI模式：只分析ROI区域
+                    Mat roiMask = CreateROIMaskForAnalysis(sourceImage);
+                    mappingData = CollectMappingDataForCurveROI(sourceImage, targetImage, roiMask, is16Bit);
+                    modeText = " (ROI分析)";
+                    roiMask.Dispose();
+                }
+                else
+                {
+                    // 全图模式：分析整个图像
+                    mappingData = CollectMappingDataForCurve(sourceImage, targetImage, is16Bit);
+                    modeText = " (全图分析)";
+                }
 
                 // 1. 创建映射曲线系列
                 var curveSeries = new Series("映射曲线")
@@ -1636,6 +1762,22 @@ namespace ImageAnalysisTool.UI.Forms
         /// </summary>
         private Dictionary<int, int> CollectMappingDataForCurve(Mat sourceImage, Mat targetImage, bool is16Bit)
         {
+            return CollectMappingDataForCurveInternal(sourceImage, targetImage, null, is16Bit);
+        }
+
+        /// <summary>
+        /// 收集ROI区域的映射数据用于曲线显示
+        /// </summary>
+        private Dictionary<int, int> CollectMappingDataForCurveROI(Mat sourceImage, Mat targetImage, Mat roiMask, bool is16Bit)
+        {
+            return CollectMappingDataForCurveInternal(sourceImage, targetImage, roiMask, is16Bit);
+        }
+
+        /// <summary>
+        /// 内部方法：收集映射数据（支持ROI掩码）
+        /// </summary>
+        private Dictionary<int, int> CollectMappingDataForCurveInternal(Mat sourceImage, Mat targetImage, Mat roiMask, bool is16Bit)
+        {
             var mappingGroups = new Dictionary<int, List<int>>();
             int maxValue = is16Bit ? 65535 : 255;
 
@@ -1653,6 +1795,14 @@ namespace ImageAnalysisTool.UI.Forms
                 {
                     if (x < sourceImage.Width && y < sourceImage.Height)
                     {
+                        // 如果有ROI掩码，检查当前像素是否在ROI区域内
+                        if (roiMask != null)
+                        {
+                            byte maskValue = roiMask.Get<byte>(y, x);
+                            if (maskValue == 0) // 不在ROI区域内，跳过
+                                continue;
+                        }
+
                         int sourceVal, targetVal;
 
                         if (is16Bit)
@@ -1830,17 +1980,19 @@ namespace ImageAnalysisTool.UI.Forms
             }
         }
 
+
+
         /// <summary>
         /// 根据图像名称获取对应的颜色
         /// </summary>
         private Color GetColorForImage(string imageName)
         {
             if (imageName.Contains("原图"))
-                return Color.Blue;
+                return Color.DarkBlue;  // 使用深蓝色以匹配目标样式
             else if (imageName.Contains("增强图1"))
-                return Color.Green;
+                return Color.DarkGreen;  // 使用深绿色
             else if (imageName.Contains("增强图2"))
-                return Color.Red;
+                return Color.DarkRed;    // 使用深红色
             else
                 return Color.Black;
         }
@@ -1866,18 +2018,19 @@ namespace ImageAnalysisTool.UI.Forms
 
                 var originalSeries = new Series("原图")
                 {
-                    ChartType = SeriesChartType.Line,
-                    Color = Color.Blue,
-                    BorderWidth = 2,
+                    ChartType = SeriesChartType.Column,
+                    Color = Color.DarkBlue,
                     Legend = "Legend"
                 };
+                originalSeries["PointWidth"] = "1.0"; // 消除柱子间隔
+
                 var enhancedSeries = new Series("增强后")
                 {
-                    ChartType = SeriesChartType.Line,
-                    Color = Color.Red,
-                    BorderWidth = 2,
+                    ChartType = SeriesChartType.Column,
+                    Color = Color.DarkRed,
                     Legend = "Legend"
                 };
+                enhancedSeries["PointWidth"] = "1.0"; // 消除柱子间隔
 
                 // 修复X轴映射问题：确保显示完整的灰度值范围
                 int histogramLength = analysisResult.OriginalHistogram.Length;
