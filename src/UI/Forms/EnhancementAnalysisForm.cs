@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using OpenCvSharp;
@@ -1115,9 +1116,9 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 对比分析按钮点击事件 - 执行4种对比分析
+        /// 对比分析按钮点击事件 - 异步执行4种对比分析
         /// </summary>
-        private void CompareBtn_Click(object sender, EventArgs e)
+        private async void CompareBtn_Click(object sender, EventArgs e)
         {
             try
             {
@@ -1125,8 +1126,8 @@ namespace ImageAnalysisTool.UI.Forms
                 compareBtn.Text = "对比中...";
                 compareBtn.Enabled = false;
 
-                // 执行4种对比分析
-                PerformComprehensiveComparison();
+                // 异步执行4种对比分析
+                await Task.Run(() => PerformComprehensiveComparison());
 
                 // 显示对比分析结果（像素映射、对比报告）
                 DisplayComparisonAnalysisResults();
