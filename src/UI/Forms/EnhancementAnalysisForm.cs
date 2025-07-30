@@ -73,6 +73,7 @@ namespace ImageAnalysisTool.UI.Forms
         private Button analyzeBtn;
         private Button compareBtn;
         private Button showROIButton;
+        private Button exportReportBtn;
         private ComboBox roiModeComboBox;
         private Label roiModeLabel;
 
@@ -646,6 +647,18 @@ namespace ImageAnalysisTool.UI.Forms
             };
             showROIButton.Click += ShowROIButton_Click;
 
+            exportReportBtn = new Button
+            {
+                Text = "导出完整报告",
+                Size = new System.Drawing.Size(120, 35),
+                Margin = new Padding(5),
+                BackColor = Color.Orange,
+                ForeColor = Color.White,
+                Font = new Font("Arial", 9, FontStyle.Bold),
+                Enabled = false
+            };
+            exportReportBtn.Click += ExportReportBtn_Click;
+
             // 创建ROI模式选择控件
             roiModeLabel = new Label
             {
@@ -671,7 +684,7 @@ namespace ImageAnalysisTool.UI.Forms
 
             // 添加按钮到布局
             buttonLayout.Controls.AddRange(new Control[] {
-                loadOriginalBtn, loadEnhancedBtn, loadEnhanced2Btn, analyzeBtn, compareBtn, showROIButton,
+                loadOriginalBtn, loadEnhancedBtn, loadEnhanced2Btn, analyzeBtn, compareBtn, showROIButton, exportReportBtn,
                 roiModeLabel, roiModeComboBox, mappingModePanel
             });
 
@@ -1123,6 +1136,7 @@ namespace ImageAnalysisTool.UI.Forms
 
                 compareBtn.Text = "重新对比";
                 compareBtn.Enabled = true;
+                exportReportBtn.Enabled = true;
             }
             catch (Exception ex)
             {
@@ -4101,6 +4115,143 @@ namespace ImageAnalysisTool.UI.Forms
             sb.AppendLine("- 缺陷检测: 选择暗部增强更强的算法");
             sb.AppendLine("- 质量检测: 选择动态范围保持更好的算法");
             sb.AppendLine("- 尺寸测量: 考虑像素值变化对测量精度的影响");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 导出完整报告按钮点击事件
+        /// </summary>
+        private void ExportReportBtn_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // 生成完整报告内容
+                var reportContent = GenerateCompleteReport();
+
+                // 生成文件名（包含时间戳）
+                var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                var fileName = $"图像增强分析报告_{timestamp}.txt";
+                var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                var filePath = Path.Combine(desktopPath, fileName);
+
+                // 保存文件
+                File.WriteAllText(filePath, reportContent, System.Text.Encoding.UTF8);
+
+                // 显示成功消息
+                MessageBox.Show($"报告已成功导出到桌面！\n文件名: {fileName}", "导出成功",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                // 可选：打开文件所在文件夹
+                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{filePath}\"");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"导出失败: {ex.Message}", "导出错误",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// 生成完整的分析报告内容
+        /// </summary>
+        private string GenerateCompleteReport()
+        {
+            var sb = new StringBuilder();
+
+            // 报告头部
+            sb.AppendLine("=".PadRight(80, '='));
+            sb.AppendLine("图像增强算法分析完整报告");
+            sb.AppendLine($"生成时间: {DateTime.Now:yyyy年MM月dd日 HH:mm:ss}");
+            sb.AppendLine("=".PadRight(80, '='));
+            sb.AppendLine();
+
+            // 1. 图像基础信息
+            sb.AppendLine("【一、图像基础信息】");
+            if (originalAnalysisTextBox?.Text != null)
+            {
+                sb.AppendLine(originalAnalysisTextBox.Text);
+            }
+            sb.AppendLine();
+
+            // 2. ROI灰度值分析
+            sb.AppendLine("【二、ROI灰度值分析】");
+            if (originalGrayValueAnalysisTextBox?.Text != null)
+            {
+                sb.AppendLine("原图ROI分析:");
+                sb.AppendLine(originalGrayValueAnalysisTextBox.Text);
+                sb.AppendLine();
+            }
+            if (enhanced1GrayValueAnalysisTextBox?.Text != null)
+            {
+                sb.AppendLine("增强图1 ROI分析:");
+                sb.AppendLine(enhanced1GrayValueAnalysisTextBox.Text);
+                sb.AppendLine();
+            }
+            if (enhanced2GrayValueAnalysisTextBox?.Text != null)
+            {
+                sb.AppendLine("增强图2 ROI分析:");
+                sb.AppendLine(enhanced2GrayValueAnalysisTextBox.Text);
+                sb.AppendLine();
+            }
+
+            // 3. 对比分析结果
+            sb.AppendLine("【三、对比分析结果】");
+            if (enhanced1AnalysisTextBox?.Text != null)
+            {
+                sb.AppendLine("原图 vs 增强图1:");
+                sb.AppendLine(enhanced1AnalysisTextBox.Text);
+                sb.AppendLine();
+            }
+            if (enhanced2AnalysisTextBox?.Text != null)
+            {
+                sb.AppendLine("原图 vs 增强图2:");
+                sb.AppendLine(enhanced2AnalysisTextBox.Text);
+                sb.AppendLine();
+            }
+
+            // 4. AI分析总结
+            sb.AppendLine("【四、AI分析总结】");
+            if (originalAISummaryTextBox?.Text != null)
+            {
+                sb.AppendLine("综合对比分析:");
+                sb.AppendLine(originalAISummaryTextBox.Text);
+                sb.AppendLine();
+            }
+            if (enhanced1AISummaryTextBox?.Text != null)
+            {
+                sb.AppendLine("增强算法1专项分析:");
+                sb.AppendLine(enhanced1AISummaryTextBox.Text);
+                sb.AppendLine();
+            }
+            if (enhanced2AISummaryTextBox?.Text != null)
+            {
+                sb.AppendLine("增强算法2专项分析:");
+                sb.AppendLine(enhanced2AISummaryTextBox.Text);
+                sb.AppendLine();
+            }
+
+            // 5. 技术参数详情
+            sb.AppendLine("【五、技术参数详情】");
+            if (originalImage != null)
+            {
+                sb.AppendLine($"原图尺寸: {originalImage.Width} × {originalImage.Height}");
+                sb.AppendLine($"图像类型: {originalImage.Type()}");
+                sb.AppendLine($"通道数: {originalImage.Channels()}");
+            }
+
+            // 添加分析模式信息
+            var currentMode = roiMappingRadio?.Checked == true ? "ROI区域分析" : "全图分析";
+            sb.AppendLine($"当前分析模式: {currentMode}");
+
+            var roiMode = roiModeComboBox?.SelectedItem?.ToString() ?? "未知";
+            sb.AppendLine($"ROI检测模式: {roiMode}");
+            sb.AppendLine();
+
+            // 报告尾部
+            sb.AppendLine("=".PadRight(80, '='));
+            sb.AppendLine("报告结束");
+            sb.AppendLine("=".PadRight(80, '='));
 
             return sb.ToString();
         }
