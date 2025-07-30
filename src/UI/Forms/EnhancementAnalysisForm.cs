@@ -55,6 +55,10 @@ namespace ImageAnalysisTool.UI.Forms
         private ComprehensiveAnalysisResult? originalVsEnhanced2Result;
         private ComprehensiveAnalysisResult? enhanced1VsEnhanced2Result;
 
+        // 单图分析结果（用于AI专项分析）
+        private ComprehensiveAnalysisResult? enhanced1AnalysisResult;
+        private ComprehensiveAnalysisResult? enhanced2AnalysisResult;
+
         // UI控件
         private ScrollableControl mainScrollPanel;  // 主滚动面板
         private TableLayoutPanel mainLayout;
@@ -1170,6 +1174,8 @@ namespace ImageAnalysisTool.UI.Forms
             originalVsEnhanced1Result = null;
             originalVsEnhanced2Result = null;
             enhanced1VsEnhanced2Result = null;
+            enhanced1AnalysisResult = null;
+            enhanced2AnalysisResult = null;
 
             // 1. 原图 vs 增强图1
             if (originalImage != null && enhancedImage != null)
@@ -1187,6 +1193,12 @@ namespace ImageAnalysisTool.UI.Forms
             if (enhancedImage != null && enhanced2Image != null)
             {
                 enhanced1VsEnhanced2Result = PerformComprehensiveAnalysis(enhancedImage, enhanced2Image);
+            }
+
+            // 4. 生成单图分析结果（用于AI专项分析）
+            if (enhancedImage != null && enhanced2Image != null)
+            {
+                CompareTwoEnhanced(enhancedImage, enhanced2Image);
             }
         }
 
@@ -3571,7 +3583,7 @@ namespace ImageAnalysisTool.UI.Forms
             Mat roiMask = CreateROIMask(originalImage);
 
             // 分析增强图1
-            var result1 = new ComprehensiveAnalysisResult
+            enhanced1AnalysisResult = new ComprehensiveAnalysisResult
             {
                 ROIQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced1, config, roiMask),
                 ROIMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced1, config, roiMask),
@@ -3582,7 +3594,7 @@ namespace ImageAnalysisTool.UI.Forms
             };
 
             // 分析增强图2
-            var result2 = new ComprehensiveAnalysisResult
+            enhanced2AnalysisResult = new ComprehensiveAnalysisResult
             {
                 ROIQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced2, config, roiMask),
                 ROIMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced2, config, roiMask),
@@ -3593,15 +3605,19 @@ namespace ImageAnalysisTool.UI.Forms
             };
 
             // 计算综合评分
+            var result1 = enhanced1AnalysisResult.Value;
             result1.ROITechnicalScore = CalculateImageQualityScore(result1.ROIQualityMetrics);
             result1.ROIMedicalScore = result1.ROIMedicalMetrics.OverallMedicalQuality;
             result1.ROIDetectionScore = result1.ROIDetectionMetrics.OverallSuitability;
             result1.ROIOverallRecommendation = (result1.ROITechnicalScore + result1.ROIMedicalScore + result1.ROIDetectionScore) / 3.0;
+            enhanced1AnalysisResult = result1;
 
+            var result2 = enhanced2AnalysisResult.Value;
             result2.ROITechnicalScore = CalculateImageQualityScore(result2.ROIQualityMetrics);
             result2.ROIMedicalScore = result2.ROIMedicalMetrics.OverallMedicalQuality;
             result2.ROIDetectionScore = result2.ROIDetectionMetrics.OverallSuitability;
             result2.ROIOverallRecommendation = (result2.ROITechnicalScore + result2.ROIMedicalScore + result2.ROIDetectionScore) / 3.0;
+            enhanced2AnalysisResult = result2;
 
             // 生成对比总结
             var summary = GenerateComparisonSummary(result1, result2);
@@ -3746,15 +3762,22 @@ namespace ImageAnalysisTool.UI.Forms
         {
             try
             {
+                // 第1列：综合对比分析
                 var comprehensiveSummary = GenerateComprehensiveAnalysisSummary();
 
-                // 三列显示相同的综合对比分析
+                // 第2列：增强算法1专项分析
+                var algorithm1Analysis = GenerateAlgorithmSpecificAnalysis(originalImage, enhancedImage, "增强算法1", enhanced1AnalysisResult);
+
+                // 第3列：增强算法2专项分析
+                var algorithm2Analysis = GenerateAlgorithmSpecificAnalysis(originalImage, enhanced2Image, "增强算法2", enhanced2AnalysisResult);
+
+                // 分别显示不同内容
                 if (originalAISummaryTextBox != null)
                     originalAISummaryTextBox.Text = comprehensiveSummary;
                 if (enhanced1AISummaryTextBox != null)
-                    enhanced1AISummaryTextBox.Text = comprehensiveSummary;
+                    enhanced1AISummaryTextBox.Text = algorithm1Analysis;
                 if (enhanced2AISummaryTextBox != null)
-                    enhanced2AISummaryTextBox.Text = comprehensiveSummary;
+                    enhanced2AISummaryTextBox.Text = algorithm2Analysis;
             }
             catch (Exception ex)
             {
@@ -3838,6 +3861,102 @@ namespace ImageAnalysisTool.UI.Forms
             sb.AppendLine("3. '基于数据分析，如何进一步优化这些算法？'");
             sb.AppendLine("4. '在什么工业检测场景下应该选择哪种算法？'");
             sb.AppendLine("5. '这些数值变化反映了什么样的图像处理策略？'");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 生成单个算法的专项分析
+        /// </summary>
+        private string GenerateAlgorithmSpecificAnalysis(Mat originalImg, Mat enhancedImg, string algorithmName, ComprehensiveAnalysisResult? analysisResult)
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine($"=== {algorithmName}深度分析 ===");
+            sb.AppendLine($"分析时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"分析模式: {(roiMappingRadio?.Checked == true ? "ROI区域分析" : "全图分析")}");
+            sb.AppendLine();
+
+            if (originalImg == null || enhancedImg == null)
+            {
+                sb.AppendLine("图像数据不完整，无法进行专项分析");
+                return sb.ToString();
+            }
+
+            // 质量指标评估
+            sb.AppendLine("【质量指标评估】");
+            if (analysisResult.HasValue)
+            {
+                var metrics = roiMappingRadio?.Checked == true ? analysisResult.Value.ROIQualityMetrics : analysisResult.Value.FullImageQualityMetrics;
+                sb.AppendLine($"PSNR (峰值信噪比): {metrics.PSNR:F2} dB");
+                sb.AppendLine($"SSIM (结构相似性): {metrics.SSIM:F3}");
+                sb.AppendLine($"边缘质量评分: {metrics.EdgeQuality:F1}/100");
+                sb.AppendLine($"过度增强风险: {metrics.OverEnhancementScore:F1}%");
+                sb.AppendLine($"噪声放大系数: {metrics.NoiseAmplification:F2}x");
+            }
+            else
+            {
+                sb.AppendLine("质量指标计算中...");
+            }
+            sb.AppendLine();
+
+            // 缺陷检测友好度
+            sb.AppendLine("【缺陷检测友好度】");
+            if (analysisResult.HasValue)
+            {
+                var detectionMetrics = roiMappingRadio?.Checked == true ? analysisResult.Value.ROIDetectionMetrics : analysisResult.Value.FullImageDetectionMetrics;
+                sb.AppendLine($"细线可见性提升: {detectionMetrics.ThinLineVisibility:F1}%");
+                sb.AppendLine($"背景噪声抑制: {detectionMetrics.BackgroundNoiseReduction:F1}/100");
+                sb.AppendLine($"缺陷对比度增强: {detectionMetrics.DefectBackgroundContrast:F1}/100");
+                sb.AppendLine($"假阳性风险: {detectionMetrics.FalsePositiveRisk:F1}%");
+                sb.AppendLine($"综合适用性: {detectionMetrics.OverallSuitability:F1}/100");
+            }
+            else
+            {
+                sb.AppendLine("缺陷检测分析计算中...");
+            }
+            sb.AppendLine();
+
+            // 算法参数推断
+            sb.AppendLine("【算法参数推断】");
+            try
+            {
+                var analyzer = new ImageEnhancementAnalyzer();
+                var enhancementAnalysis = analyzer.AnalyzeEnhancement(originalImg, enhancedImg);
+                sb.AppendLine($"推断算法类型: {enhancementAnalysis.SuggestedAlgorithm}");
+                sb.AppendLine($"估计Gamma值: {enhancementAnalysis.GammaEstimate:F2}");
+                sb.AppendLine($"对比度变化率: {enhancementAnalysis.ContrastRatio:F2}x");
+                sb.AppendLine($"亮度变化: {enhancementAnalysis.BrightnessChange:+F1;-F1;0}%");
+
+                if (enhancementAnalysis.EstimatedParameters.Count > 0)
+                {
+                    sb.AppendLine("估计参数:");
+                    foreach (var param in enhancementAnalysis.EstimatedParameters)
+                    {
+                        sb.AppendLine($"  {param.Key}: {param.Value:F2}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine($"参数推断失败: {ex.Message}");
+            }
+            sb.AppendLine();
+
+            // 专项建议
+            sb.AppendLine("【专项优化建议】");
+            if (analysisResult.HasValue)
+            {
+                var score = roiMappingRadio?.Checked == true ? analysisResult.Value.ROIOverallRecommendation : analysisResult.Value.FullImageOverallRecommendation;
+                if (score > 80)
+                    sb.AppendLine("✅ 算法效果优秀，建议保持当前参数");
+                else if (score > 60)
+                    sb.AppendLine("⚠️ 算法效果良好，可考虑微调参数");
+                else
+                    sb.AppendLine("❌ 算法效果需要改进，建议调整参数或更换算法");
+
+                sb.AppendLine($"综合推荐度: {score:F1}/100");
+            }
 
             return sb.ToString();
         }
