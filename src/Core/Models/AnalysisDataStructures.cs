@@ -295,4 +295,61 @@ namespace ImageAnalysisTool.Core.Models
             AccuracyLevel = 2   // 平衡精度和速度
         };
     }
+
+    /// <summary>
+    /// 双图像对比分析结果
+    /// </summary>
+    public struct ComparisonAnalysisResult
+    {
+        /// <summary>
+        /// 增强图1的分析结果
+        /// </summary>
+        public ComprehensiveAnalysisResult Enhanced1Result { get; set; }
+
+        /// <summary>
+        /// 增强图2的分析结果
+        /// </summary>
+        public ComprehensiveAnalysisResult Enhanced2Result { get; set; }
+
+        /// <summary>
+        /// 对比总结
+        /// </summary>
+        public ComparisonSummary Summary { get; set; }
+    }
+
+    /// <summary>
+    /// 对比总结
+    /// </summary>
+    public struct ComparisonSummary
+    {
+        /// <summary>
+        /// 推荐的增强图（1或2）
+        /// </summary>
+        public int RecommendedImage { get; set; }
+
+        /// <summary>
+        /// 推荐理由
+        /// </summary>
+        public string RecommendationReason { get; set; }
+
+        /// <summary>
+        /// 图像质量对比差异
+        /// </summary>
+        public double QualityDifference { get; set; }
+
+        /// <summary>
+        /// 医学影像指标对比差异
+        /// </summary>
+        public double MedicalDifference { get; set; }
+
+        /// <summary>
+        /// 缺陷检测适用性对比差异
+        /// </summary>
+        public double DetectionDifference { get; set; }
+
+        /// <summary>
+        /// 综合优势评分差异
+        /// </summary>
+        public double OverallDifference { get; set; }
+    }
 }

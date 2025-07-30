@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using OpenCvSharp;
@@ -11,6 +13,22 @@ using FellowOakDicom;
 using ImageAnalysisTool.Core.Analyzers;
 using ImageAnalysisTool.Core.Models;
 using ImageAnalysisTool.Core.Enhancers;
+
+/// <summary>
+/// ROI检测模式枚举
+/// </summary>
+public enum ROIMode
+{
+    /// <summary>
+    /// 通用OTSU阈值模式
+    /// </summary>
+    General,
+
+    /// <summary>
+    /// 工业X射线焊缝检测模式
+    /// </summary>
+    Weld
+}
 
 namespace ImageAnalysisTool.UI.Forms
 {
@@ -24,7 +42,18 @@ namespace ImageAnalysisTool.UI.Forms
         private ImageEnhancementAnalyzer analyzer;
         private Mat originalImage;
         private Mat enhancedImage;
+        private Mat enhanced2Image;
         private ImageEnhancementAnalyzer.AnalysisResult analysisResult;
+
+        // 灰度值分析结果
+        private string originalGrayValueAnalysis = "";
+        private string enhanced1GrayValueAnalysis = "";
+        private string enhanced2GrayValueAnalysis = "";
+
+        // 对比分析结果
+        private ComprehensiveAnalysisResult? originalVsEnhanced1Result;
+        private ComprehensiveAnalysisResult? originalVsEnhanced2Result;
+        private ComprehensiveAnalysisResult? enhanced1VsEnhanced2Result;
 
         // UI控件
         private ScrollableControl mainScrollPanel;  // 主滚动面板
@@ -33,11 +62,43 @@ namespace ImageAnalysisTool.UI.Forms
         private Panel imagePanel;
         private PictureBox originalPictureBox;
         private PictureBox enhancedPictureBox;
+        private PictureBox enhanced2PictureBox;
         private Button loadOriginalBtn;
         private Button loadEnhancedBtn;
+        private Button loadEnhanced2Btn;
         private Button analyzeBtn;
+        private Button compareBtn;
         private Button showROIButton;
+        private ComboBox roiModeComboBox;
+        private Label roiModeLabel;
 
+        // 新的列式布局控件
+        private Panel originalColumnPanel;
+        private Panel enhanced1ColumnPanel;
+        private Panel enhanced2ColumnPanel;
+
+        // 原图列控件
+        private Label originalLabel;
+        private Chart originalHistogramChart;
+        private Chart originalPixelMappingChart;
+        private RichTextBox originalAnalysisTextBox;
+        private RichTextBox originalGrayValueAnalysisTextBox;
+
+        // 增强图1列控件
+        private Label enhancedLabel;
+        private Chart enhanced1HistogramChart;
+        private Chart enhanced1PixelMappingChart;
+        private RichTextBox enhanced1AnalysisTextBox;
+        private RichTextBox enhanced1GrayValueAnalysisTextBox;
+
+        // 增强图2列控件
+        private Label enhanced2Label;
+        private Chart enhanced2HistogramChart;
+        private Chart enhanced2PixelMappingChart;
+        private RichTextBox enhanced2AnalysisTextBox;
+        private RichTextBox enhanced2GrayValueAnalysisTextBox;
+
+        // 保留旧的控件引用（兼容性）
         private Chart histogramChart;
         private Chart mappingChart;
         private RichTextBox resultTextBox;
@@ -130,30 +191,340 @@ namespace ImageAnalysisTool.UI.Forms
             mainLayout = new TableLayoutPanel
             {
                 Location = new System.Drawing.Point(0, 0),
-                Size = new System.Drawing.Size(1580, 1200),  // 固定大小，允许滚动
-                ColumnCount = 2,  // 2列：原图、增强图
-                RowCount = 3      // 3行：顶部控制、图像、结果
+                Size = new System.Drawing.Size(1580, 1400),  // 增加高度以容纳更多内容
+                ColumnCount = 3,  // 3列：原图、增强图1、增强图2
+                RowCount = 2      // 2行：顶部控制、3列内容
             };
 
             // 设置列和行的大小
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F)); // 原图
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F)); // 增强图1
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F)); // 增强图2
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F)); // 原图列
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F)); // 增强图1列
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F)); // 增强图2列
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80F));         // 顶部控制面板
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));          // 图像显示区域
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));          // 结果显示区域
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));         // 3列内容区域
 
             // 创建顶部控制面板
             CreateTopControlPanel();
 
-            // 创建图像显示面板
-            CreateImagePanel();
+            // 创建3列内容面板
+            CreateColumnPanels();
 
-            // 创建结果面板
-            CreateResultPanel();
+            // 设置兼容性引用
+            SetCompatibilityReferences();
 
             mainScrollPanel.Controls.Add(mainLayout);
             this.Controls.Add(mainScrollPanel);
+        }
+
+        /// <summary>
+        /// 创建3列内容面板
+        /// </summary>
+        private void CreateColumnPanels()
+        {
+            // 创建原图列
+            CreateOriginalColumn();
+
+            // 创建增强图1列
+            CreateEnhanced1Column();
+
+            // 创建增强图2列
+            CreateEnhanced2Column();
+        }
+
+        /// <summary>
+        /// 创建原图列
+        /// </summary>
+        private void CreateOriginalColumn()
+        {
+            originalColumnPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // 创建垂直布局
+            TableLayoutPanel columnLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 6,  // 增加到6行
+                AutoSize = true
+            };
+
+            // 设置行样式
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));   // 标题
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));    // 图像
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 直方图
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 像素映射
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));    // 分析结果
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 10F));    // 灰度值分析
+
+            // 创建标题标签
+            originalLabel = new Label
+            {
+                Text = "原始图像",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                BackColor = Color.LightBlue
+            };
+
+            // 创建图像显示控件
+            originalPictureBox = new PictureBox
+            {
+                Dock = DockStyle.Fill,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // 创建直方图
+            originalHistogramChart = CreateChart("原图直方图");
+
+            // 创建像素映射图
+            originalPixelMappingChart = CreateChart("原图像素映射");
+
+            // 创建分析结果文本框
+            originalAnalysisTextBox = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                Font = new Font("Consolas", 9),
+                BackColor = Color.White
+            };
+
+            // 创建灰度值分析文本框
+            originalGrayValueAnalysisTextBox = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                Font = new Font("Consolas", 9),
+                BackColor = Color.LightYellow
+            };
+
+            // 添加到列布局
+            columnLayout.Controls.Add(originalLabel, 0, 0);
+            columnLayout.Controls.Add(originalPictureBox, 0, 1);
+            columnLayout.Controls.Add(originalHistogramChart, 0, 2);
+            columnLayout.Controls.Add(originalPixelMappingChart, 0, 3);
+            columnLayout.Controls.Add(originalAnalysisTextBox, 0, 4);
+            columnLayout.Controls.Add(originalGrayValueAnalysisTextBox, 0, 5);
+
+            originalColumnPanel.Controls.Add(columnLayout);
+
+            // 添加到主布局
+            mainLayout.Controls.Add(originalColumnPanel, 0, 1);
+        }
+
+        /// <summary>
+        /// 创建增强图1列
+        /// </summary>
+        private void CreateEnhanced1Column()
+        {
+            enhanced1ColumnPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // 创建垂直布局
+            TableLayoutPanel columnLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 6,  // 增加到6行
+                AutoSize = true
+            };
+
+            // 设置行样式
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));   // 标题
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));    // 图像
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 直方图
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 像素映射
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));    // 分析结果
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 10F));    // 灰度值分析
+
+            // 创建标题标签
+            enhancedLabel = new Label
+            {
+                Text = "增强图像1",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                BackColor = Color.LightGreen
+            };
+
+            // 创建图像显示控件
+            enhancedPictureBox = new PictureBox
+            {
+                Dock = DockStyle.Fill,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // 创建直方图
+            enhanced1HistogramChart = CreateChart("增强图1直方图");
+
+            // 创建像素映射图
+            enhanced1PixelMappingChart = CreateChart("增强图1像素映射");
+
+            // 创建分析结果文本框
+            enhanced1AnalysisTextBox = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                Font = new Font("Consolas", 9),
+                BackColor = Color.White
+            };
+
+            // 创建灰度值分析文本框
+            enhanced1GrayValueAnalysisTextBox = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                Font = new Font("Consolas", 9),
+                BackColor = Color.LightYellow
+            };
+
+            // 添加到列布局
+            columnLayout.Controls.Add(enhancedLabel, 0, 0);
+            columnLayout.Controls.Add(enhancedPictureBox, 0, 1);
+            columnLayout.Controls.Add(enhanced1HistogramChart, 0, 2);
+            columnLayout.Controls.Add(enhanced1PixelMappingChart, 0, 3);
+            columnLayout.Controls.Add(enhanced1AnalysisTextBox, 0, 4);
+            columnLayout.Controls.Add(enhanced1GrayValueAnalysisTextBox, 0, 5);
+
+            enhanced1ColumnPanel.Controls.Add(columnLayout);
+
+            // 添加到主布局
+            mainLayout.Controls.Add(enhanced1ColumnPanel, 1, 1);
+        }
+
+        /// <summary>
+        /// 创建增强图2列
+        /// </summary>
+        private void CreateEnhanced2Column()
+        {
+            enhanced2ColumnPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // 创建垂直布局
+            TableLayoutPanel columnLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 6,  // 增加到6行
+                AutoSize = true
+            };
+
+            // 设置行样式
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));   // 标题
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));    // 图像
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 直方图
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));    // 像素映射
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));    // 分析结果
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 10F));    // 灰度值分析
+
+            // 创建标题标签
+            enhanced2Label = new Label
+            {
+                Text = "增强图像2",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                BackColor = Color.LightCoral
+            };
+
+            // 创建图像显示控件
+            enhanced2PictureBox = new PictureBox
+            {
+                Dock = DockStyle.Fill,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // 创建直方图
+            enhanced2HistogramChart = CreateChart("增强图2直方图");
+
+            // 创建像素映射图
+            enhanced2PixelMappingChart = CreateChart("增强图2像素映射");
+
+            // 创建分析结果文本框
+            enhanced2AnalysisTextBox = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                Font = new Font("Consolas", 9),
+                BackColor = Color.White
+            };
+
+            // 创建灰度值分析文本框
+            enhanced2GrayValueAnalysisTextBox = new RichTextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                Font = new Font("Consolas", 9),
+                BackColor = Color.LightYellow
+            };
+
+            // 添加到列布局
+            columnLayout.Controls.Add(enhanced2Label, 0, 0);
+            columnLayout.Controls.Add(enhanced2PictureBox, 0, 1);
+            columnLayout.Controls.Add(enhanced2HistogramChart, 0, 2);
+            columnLayout.Controls.Add(enhanced2PixelMappingChart, 0, 3);
+            columnLayout.Controls.Add(enhanced2AnalysisTextBox, 0, 4);
+            columnLayout.Controls.Add(enhanced2GrayValueAnalysisTextBox, 0, 5);
+
+            enhanced2ColumnPanel.Controls.Add(columnLayout);
+
+            // 添加到主布局
+            mainLayout.Controls.Add(enhanced2ColumnPanel, 2, 1);
+        }
+
+        /// <summary>
+        /// 创建图表控件的通用方法
+        /// </summary>
+        private Chart CreateChart(string title)
+        {
+            Chart chart = new Chart
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.White
+            };
+
+            ChartArea chartArea = new ChartArea("MainArea")
+            {
+                BackColor = Color.White,
+                BorderColor = Color.Black,
+                BorderWidth = 1,
+                BorderDashStyle = ChartDashStyle.Solid
+            };
+            chart.ChartAreas.Add(chartArea);
+
+            Title chartTitle = new Title(title)
+            {
+                Font = new Font("Arial", 10, FontStyle.Bold)
+            };
+            chart.Titles.Add(chartTitle);
+
+            return chart;
+        }
+
+        /// <summary>
+        /// 设置兼容性引用，让旧代码能够正常工作
+        /// </summary>
+        private void SetCompatibilityReferences()
+        {
+            // 设置主要控件引用
+            histogramChart = enhanced1HistogramChart;  // 默认使用增强图1的直方图
+            mappingChart = enhanced1PixelMappingChart; // 默认使用增强图1的像素映射
+            resultTextBox = enhanced1AnalysisTextBox;  // 默认使用增强图1的分析文本
+            grayValueAnalysisTextBox = enhanced1GrayValueAnalysisTextBox; // 默认使用增强图1的灰度分析
         }
 
         /// <summary>
@@ -187,11 +558,19 @@ namespace ImageAnalysisTool.UI.Forms
 
             loadEnhancedBtn = new Button
             {
-                Text = "加载增强图",
+                Text = "加载增强图1",
                 Size = new System.Drawing.Size(120, 35),
                 Margin = new Padding(5)
             };
             loadEnhancedBtn.Click += LoadEnhancedBtn_Click;
+
+            loadEnhanced2Btn = new Button
+            {
+                Text = "加载增强图2",
+                Size = new System.Drawing.Size(120, 35),
+                Margin = new Padding(5)
+            };
+            loadEnhanced2Btn.Click += LoadEnhanced2Btn_Click;
 
             analyzeBtn = new Button
             {
@@ -203,6 +582,16 @@ namespace ImageAnalysisTool.UI.Forms
             };
             analyzeBtn.Click += AnalyzeBtn_Click;
 
+            compareBtn = new Button
+            {
+                Text = "对比分析",
+                Size = new System.Drawing.Size(100, 35),
+                Margin = new Padding(5),
+                BackColor = Color.LightGreen,
+                Enabled = false
+            };
+            compareBtn.Click += CompareBtn_Click;
+
             showROIButton = new Button
             {
                 Text = "显示ROI区域",
@@ -211,32 +600,53 @@ namespace ImageAnalysisTool.UI.Forms
             };
             showROIButton.Click += ShowROIButton_Click;
 
+            // 创建ROI模式选择控件
+            roiModeLabel = new Label
+            {
+                Text = "ROI模式:",
+                Size = new System.Drawing.Size(60, 35),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font("Arial", 9),
+                Margin = new Padding(5)
+            };
+
+            roiModeComboBox = new ComboBox
+            {
+                Size = new System.Drawing.Size(100, 35),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Arial", 9),
+                Margin = new Padding(5)
+            };
+            roiModeComboBox.Items.AddRange(new object[] { "通用模式", "焊缝模式" });
+            roiModeComboBox.SelectedIndex = 0; // 默认选择通用模式
+
             // 添加按钮到布局
             buttonLayout.Controls.AddRange(new Control[] {
-                loadOriginalBtn, loadEnhancedBtn, analyzeBtn, showROIButton
+                loadOriginalBtn, loadEnhancedBtn, loadEnhanced2Btn, analyzeBtn, compareBtn, showROIButton,
+                roiModeLabel, roiModeComboBox
             });
 
             topControlPanel.Controls.Add(buttonLayout);
 
 
 
-            // 添加到主布局，跨2列
+            // 添加到主布局，跨3列
             mainLayout.Controls.Add(topControlPanel, 0, 0);
-            mainLayout.SetColumnSpan(topControlPanel, 2);
+            mainLayout.SetColumnSpan(topControlPanel, 3);
         }
 
         /// <summary>
-        /// 创建图像显示面板
+        /// 创建图像显示面板（旧版本，已被列布局替代）
         /// </summary>
-        private void CreateImagePanel()
+        private void CreateImagePanel_Deprecated()
         {
-            // 原图显示
-            var originalPanel = new Panel
+            // 原图显示（旧版本，已被列布局替代）
+            var originalPanel_deprecated = new Panel
             {
                 Dock = DockStyle.Fill,
                 BorderStyle = BorderStyle.FixedSingle
             };
-            var originalLabel = new Label
+            var originalLabel_deprecated = new Label
             {
                 Text = "原图",
                 Dock = DockStyle.Top,
@@ -244,22 +654,17 @@ namespace ImageAnalysisTool.UI.Forms
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.LightBlue
             };
-            originalPictureBox = new PictureBox
-            {
-                Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.Zoom,
-                BackColor = Color.White
-            };
-            originalPanel.Controls.Add(originalPictureBox);
-            originalPanel.Controls.Add(originalLabel);
+            // originalPictureBox 现在在列布局中创建
+            // originalPanel.Controls.Add(originalPictureBox); // 已移至列布局
+            originalPanel_deprecated.Controls.Add(originalLabel_deprecated);
 
-            // 增强图显示
-            var enhancedPanel = new Panel
+            // 增强图显示（旧版本，已被列布局替代）
+            var enhancedPanel_deprecated = new Panel
             {
                 Dock = DockStyle.Fill,
                 BorderStyle = BorderStyle.FixedSingle
             };
-            var enhancedLabel = new Label
+            var enhancedLabel_deprecated = new Label
             {
                 Text = "增强图",
                 Dock = DockStyle.Top,
@@ -267,18 +672,32 @@ namespace ImageAnalysisTool.UI.Forms
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.LightGreen
             };
-            enhancedPictureBox = new PictureBox
+            // enhancedPictureBox 现在在列布局中创建
+            // enhancedPanel_deprecated.Controls.Add(enhancedPictureBox); // 已移至列布局
+            enhancedPanel_deprecated.Controls.Add(enhancedLabel_deprecated);
+
+            // 第二个增强图显示（旧版本，已被列布局替代）
+            var enhanced2Panel_deprecated = new Panel
             {
                 Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.Zoom,
-                BackColor = Color.White
+                BorderStyle = BorderStyle.FixedSingle
             };
-            enhancedPanel.Controls.Add(enhancedPictureBox);
-            enhancedPanel.Controls.Add(enhancedLabel);
+            var enhanced2Label_deprecated = new Label
+            {
+                Text = "增强图2",
+                Dock = DockStyle.Top,
+                Height = 25,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.LightCoral
+            };
+            // enhanced2PictureBox 现在在列布局中创建
+            // enhanced2Panel_deprecated.Controls.Add(enhanced2PictureBox); // 已移至列布局
+            enhanced2Panel_deprecated.Controls.Add(enhanced2Label_deprecated);
 
-            // 添加到主布局 - 只使用前两列
-            mainLayout.Controls.Add(originalPanel, 0, 1);
-            mainLayout.Controls.Add(enhancedPanel, 1, 1);
+            // 添加到主布局 - 使用三列（旧版本，已被列布局替代）
+            // mainLayout.Controls.Add(originalPanel_deprecated, 0, 1);
+            // mainLayout.Controls.Add(enhancedPanel_deprecated, 1, 1);
+            // mainLayout.Controls.Add(enhanced2Panel_deprecated, 2, 1);
         }
 
         private void CreateImagePanel_Old()
@@ -294,39 +713,29 @@ namespace ImageAnalysisTool.UI.Forms
             imageLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
             imageLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
 
-            // 原图显示
-            var originalPanel = new Panel { Dock = DockStyle.Fill };
-            originalPanel.Controls.Add(new Label { Text = "原图", Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleCenter });
-            originalPictureBox = new PictureBox 
-            { 
-                Dock = DockStyle.Fill, 
-                SizeMode = PictureBoxSizeMode.Zoom,
-                BorderStyle = BorderStyle.FixedSingle
-            };
-            originalPanel.Controls.Add(originalPictureBox);
+            // 原图显示（旧版本，已被列布局替代）
+            var originalPanel_old = new Panel { Dock = DockStyle.Fill };
+            originalPanel_old.Controls.Add(new Label { Text = "原图", Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleCenter });
+            // originalPictureBox 现在在列布局中创建
+            // originalPanel_old.Controls.Add(originalPictureBox);
 
-            // 增强图显示
-            var enhancedPanel = new Panel { Dock = DockStyle.Fill };
-            enhancedPanel.Controls.Add(new Label { Text = "增强后", Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleCenter });
-            enhancedPictureBox = new PictureBox 
-            { 
-                Dock = DockStyle.Fill, 
-                SizeMode = PictureBoxSizeMode.Zoom,
-                BorderStyle = BorderStyle.FixedSingle
-            };
-            enhancedPanel.Controls.Add(enhancedPictureBox);
+            // 增强图显示（旧版本，已被列布局替代）
+            var enhancedPanel_old = new Panel { Dock = DockStyle.Fill };
+            enhancedPanel_old.Controls.Add(new Label { Text = "增强后", Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleCenter });
+            // enhancedPictureBox 现在在列布局中创建
+            // enhancedPanel.Controls.Add(enhancedPictureBox); // 已移至列布局
 
-            imageLayout.Controls.Add(originalPanel, 0, 0);
-            imageLayout.Controls.Add(enhancedPanel, 1, 0);
+            // imageLayout.Controls.Add(originalPanel_old, 0, 0); // 已移至列布局
+            // imageLayout.Controls.Add(enhancedPanel_old, 1, 0); // 已移至列布局
             imagePanel.Controls.Add(imageLayout);
         }
 
 
 
         /// <summary>
-        /// 创建结果面板（优化版：添加图表说明和改善布局）
+        /// 创建结果面板（旧版本，已被列布局替代）
         /// </summary>
-        private void CreateResultPanel()
+        private void CreateResultPanel_Deprecated()
         {
             // 创建结果面板，跨3列
             var resultMainPanel = new Panel
@@ -430,9 +839,9 @@ namespace ImageAnalysisTool.UI.Forms
 
             resultMainPanel.Controls.Add(resultLayout);
 
-            // 添加到主布局，跨2列
+            // 添加到主布局，跨3列
             mainLayout.Controls.Add(resultMainPanel, 0, 2);
-            mainLayout.SetColumnSpan(resultMainPanel, 2);
+            mainLayout.SetColumnSpan(resultMainPanel, 3);
         }
 
         private void LoadOriginalBtn_Click(object sender, EventArgs e)
@@ -481,13 +890,59 @@ namespace ImageAnalysisTool.UI.Forms
             }
         }
 
-        private void CheckCanAnalyze()
+        private void LoadEnhanced2Btn_Click(object sender, EventArgs e)
         {
-            analyzeBtn.Enabled = originalImage != null && enhancedImage != null &&
-                                originalImage.Size() == enhancedImage.Size();
-            showROIButton.Enabled = originalImage != null;
+            using (var dialog = new OpenFileDialog())
+            {
+                dialog.Filter = "图像文件|*.dcm;*.dic;*.acr;*.jpg;*.jpeg;*.png;*.bmp;*.tiff;*.tif";
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        enhanced2Image?.Dispose();
+                        enhanced2Image = LoadImageFile(dialog.FileName);
+
+                        enhanced2PictureBox.Image = ConvertMatToBitmap(enhanced2Image);
+                        CheckCanAnalyze();
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"加载增强图2失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
         }
 
+        private void CheckCanAnalyze()
+        {
+            // 需要原图和至少一个增强图
+            bool hasOriginal = originalImage != null;
+            bool hasEnhanced1 = enhancedImage != null;
+            bool hasEnhanced2 = enhanced2Image != null;
+
+            // 检查尺寸匹配
+            bool sizesMatch = true;
+            if (hasOriginal && hasEnhanced1)
+            {
+                sizesMatch = sizesMatch && originalImage.Size() == enhancedImage.Size();
+            }
+            if (hasOriginal && hasEnhanced2)
+            {
+                sizesMatch = sizesMatch && originalImage.Size() == enhanced2Image.Size();
+            }
+
+            // 启用分析按钮：有原图且至少有一个增强图，且尺寸匹配
+            analyzeBtn.Enabled = hasOriginal && (hasEnhanced1 || hasEnhanced2) && sizesMatch;
+
+            // 启用对比按钮：有原图且有两个增强图，且尺寸匹配
+            compareBtn.Enabled = hasOriginal && hasEnhanced1 && hasEnhanced2 && sizesMatch;
+
+            showROIButton.Enabled = hasOriginal;
+        }
+
+        /// <summary>
+        /// 开始分析按钮点击事件 - 执行单独的灰度值分析
+        /// </summary>
         private void AnalyzeBtn_Click(object sender, EventArgs e)
         {
             try
@@ -496,22 +951,18 @@ namespace ImageAnalysisTool.UI.Forms
                 analyzeBtn.Text = "分析中...";
                 analyzeBtn.Enabled = false;
 
-                // 执行传统分析
-                analysisResult = analyzer.AnalyzeEnhancement(originalImage, enhancedImage);
+                // 执行单独的灰度值分析
+                PerformGrayValueAnalysis();
 
-                // 执行增强分析（新增）
-                var comprehensiveResult = PerformComprehensiveAnalysis(originalImage, enhancedImage);
-
-                // 显示结果
-                DisplayResults();
-                DisplayComprehensiveResults(comprehensiveResult);
+                // 显示基础分析结果（直方图、基础信息、ROI灰度值分析）
+                DisplayBasicAnalysisResults();
 
                 analyzeBtn.Text = "重新分析";
                 analyzeBtn.Enabled = true;
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"分析失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"灰度值分析失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 analyzeBtn.Text = "开始分析";
                 analyzeBtn.Enabled = true;
             }
@@ -521,25 +972,883 @@ namespace ImageAnalysisTool.UI.Forms
             }
         }
 
-        private void DisplayResults()
+        /// <summary>
+        /// 对比分析按钮点击事件 - 执行4种对比分析
+        /// </summary>
+        private void CompareBtn_Click(object sender, EventArgs e)
         {
-            // 显示直方图
-            DisplayHistogram();
+            try
+            {
+                this.Cursor = Cursors.WaitCursor;
+                compareBtn.Text = "对比中...";
+                compareBtn.Enabled = false;
 
-            // 显示像素映射
-            DisplayPixelMapping();
+                // 执行4种对比分析
+                PerformComprehensiveComparison();
 
-            // 显示文本结果
-            DisplayTextResults();
+                // 显示对比分析结果（像素映射、对比报告）
+                DisplayComparisonAnalysisResults();
 
-            // 显示灰度值分析
-            DisplayGrayValueAnalysis();
+                compareBtn.Text = "重新对比";
+                compareBtn.Enabled = true;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"对比分析失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                compareBtn.Text = "对比分析";
+                compareBtn.Enabled = true;
+            }
+            finally
+            {
+                this.Cursor = Cursors.Default;
+            }
         }
 
         /// <summary>
-        /// 显示直方图（优化版：改善显示效果和性能）
+        /// 执行单独的灰度值分析
         /// </summary>
-        private void DisplayHistogram()
+        private void PerformGrayValueAnalysis()
+        {
+            // 清空之前的分析结果
+            originalGrayValueAnalysis = "";
+            enhanced1GrayValueAnalysis = "";
+            enhanced2GrayValueAnalysis = "";
+
+            // 分析原图ROI灰度值
+            if (originalImage != null)
+            {
+                originalGrayValueAnalysis = AnalyzeImageGrayValues(originalImage, "原图");
+            }
+
+            // 分析增强图1 ROI灰度值
+            if (enhancedImage != null)
+            {
+                enhanced1GrayValueAnalysis = AnalyzeImageGrayValues(enhancedImage, "增强图1");
+            }
+
+            // 分析增强图2 ROI灰度值
+            if (enhanced2Image != null)
+            {
+                enhanced2GrayValueAnalysis = AnalyzeImageGrayValues(enhanced2Image, "增强图2");
+            }
+        }
+
+        /// <summary>
+        /// 执行综合对比分析（4种对比）
+        /// </summary>
+        private void PerformComprehensiveComparison()
+        {
+            // 清空之前的对比结果
+            originalVsEnhanced1Result = null;
+            originalVsEnhanced2Result = null;
+            enhanced1VsEnhanced2Result = null;
+
+            // 1. 原图 vs 增强图1
+            if (originalImage != null && enhancedImage != null)
+            {
+                originalVsEnhanced1Result = PerformComprehensiveAnalysis(originalImage, enhancedImage);
+            }
+
+            // 2. 原图 vs 增强图2
+            if (originalImage != null && enhanced2Image != null)
+            {
+                originalVsEnhanced2Result = PerformComprehensiveAnalysis(originalImage, enhanced2Image);
+            }
+
+            // 3. 增强图1 vs 增强图2
+            if (enhancedImage != null && enhanced2Image != null)
+            {
+                enhanced1VsEnhanced2Result = PerformComprehensiveAnalysis(enhancedImage, enhanced2Image);
+            }
+        }
+
+        /// <summary>
+        /// 显示基础分析结果（开始分析按钮）
+        /// </summary>
+        private void DisplayBasicAnalysisResults()
+        {
+            // 显示直方图
+            if (originalImage != null)
+                DisplayHistogramForImage(originalImage, originalHistogramChart, "原图");
+            if (enhancedImage != null)
+                DisplayHistogramForImage(enhancedImage, enhanced1HistogramChart, "增强图1");
+            if (enhanced2Image != null)
+                DisplayHistogramForImage(enhanced2Image, enhanced2HistogramChart, "增强图2");
+
+            // 显示基础信息和ROI灰度值分析
+            DisplayBasicImageInfo();
+        }
+
+        /// <summary>
+        /// 显示对比分析结果（对比分析按钮）
+        /// </summary>
+        private void DisplayComparisonAnalysisResults()
+        {
+            // 显示像素映射
+            if (originalImage != null && enhancedImage != null)
+                DisplayPixelMappingForImages(originalImage, enhancedImage, originalPixelMappingChart, "原图 vs 增强图1");
+            if (originalImage != null && enhancedImage != null)
+                DisplayPixelMappingForImages(originalImage, enhancedImage, enhanced1PixelMappingChart, "增强图1 vs 原图");
+            if (originalImage != null && enhanced2Image != null)
+                DisplayPixelMappingForImages(originalImage, enhanced2Image, enhanced2PixelMappingChart, "增强图2 vs 原图");
+
+            // 显示对比分析报告
+            DisplayComparisonReports();
+        }
+
+        /// <summary>
+        /// 分析单个图像的ROI灰度值
+        /// </summary>
+        private string AnalyzeImageGrayValues(Mat image, string imageName)
+        {
+            try
+            {
+                StringBuilder result = new StringBuilder();
+                result.AppendLine($"=== {imageName} ROI灰度值分析 ===\n");
+
+                // 创建ROI掩码（使用通用OTSU方法）
+                Mat roiMask = CreateROIMaskForAnalysis(image);
+
+                // 基本信息
+                result.AppendLine($"图像尺寸: {image.Width} × {image.Height}");
+                result.AppendLine($"图像类型: {image.Type()}");
+
+                // 检测位深
+                bool is16Bit = image.Type() == MatType.CV_16UC1;
+                int maxValue = is16Bit ? 65535 : 255;
+                result.AppendLine($"位深: {(is16Bit ? "16位" : "8位")} (0-{maxValue})");
+
+                // ROI区域统计
+                int roiPixels = Cv2.CountNonZero(roiMask);
+                int totalPixels = image.Width * image.Height;
+                double roiRatio = (double)roiPixels / totalPixels * 100;
+                result.AppendLine($"ROI区域占比: {roiRatio:F1}%");
+                result.AppendLine($"ROI像素数量: {roiPixels:N0}");
+
+                // ROI区域灰度值统计
+                if (roiPixels > 0)
+                {
+                    Scalar mean, stddev;
+                    Cv2.MeanStdDev(image, out mean, out stddev, roiMask);
+
+                    double minVal, maxVal;
+                    OpenCvSharp.Point minLoc, maxLoc;
+                    Cv2.MinMaxLoc(image, out minVal, out maxVal, out minLoc, out maxLoc, roiMask);
+
+                    result.AppendLine($"\nROI区域灰度值统计:");
+                    result.AppendLine($"  平均值: {mean.Val0:F1}");
+                    result.AppendLine($"  标准差: {stddev.Val0:F1}");
+                    result.AppendLine($"  最小值: {minVal:F0}");
+                    result.AppendLine($"  最大值: {maxVal:F0}");
+                    result.AppendLine($"  动态范围: {maxVal - minVal:F0}");
+
+                    // 计算对比度
+                    double contrast = stddev.Val0 / mean.Val0 * 100;
+                    result.AppendLine($"  对比度系数: {contrast:F2}%");
+                }
+                else
+                {
+                    result.AppendLine("\n警告: 未检测到有效的ROI区域");
+                }
+
+                roiMask.Dispose();
+                return result.ToString();
+            }
+            catch (Exception ex)
+            {
+                return $"{imageName} ROI灰度值分析失败: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// 显示基础图像信息
+        /// </summary>
+        private void DisplayBasicImageInfo()
+        {
+            // 显示原图信息
+            if (originalImage != null)
+            {
+                originalAnalysisTextBox.Text = GenerateBasicImageReport(originalImage, "原图");
+                originalGrayValueAnalysisTextBox.Text = originalGrayValueAnalysis;
+            }
+
+            // 显示增强图1信息
+            if (enhancedImage != null)
+            {
+                enhanced1AnalysisTextBox.Text = GenerateBasicImageReport(enhancedImage, "增强图1");
+                enhanced1GrayValueAnalysisTextBox.Text = enhanced1GrayValueAnalysis;
+            }
+
+            // 显示增强图2信息
+            if (enhanced2Image != null)
+            {
+                enhanced2AnalysisTextBox.Text = GenerateBasicImageReport(enhanced2Image, "增强图2");
+                enhanced2GrayValueAnalysisTextBox.Text = enhanced2GrayValueAnalysis;
+            }
+        }
+
+        /// <summary>
+        /// 生成基础图像报告
+        /// </summary>
+        private string GenerateBasicImageReport(Mat image, string imageName)
+        {
+            try
+            {
+                StringBuilder result = new StringBuilder();
+                result.AppendLine($"=== {imageName} 基础信息 ===\n");
+
+                // 基本信息
+                result.AppendLine($"图像尺寸: {image.Width} × {image.Height}");
+                result.AppendLine($"图像类型: {image.Type()}");
+                result.AppendLine($"通道数: {image.Channels()}");
+
+                // 检测位深
+                bool is16Bit = image.Type() == MatType.CV_16UC1;
+                int maxValue = is16Bit ? 65535 : 255;
+                result.AppendLine($"位深: {(is16Bit ? "16位" : "8位")} (0-{maxValue})");
+
+                // 全图统计信息
+                Scalar mean, stddev;
+                Cv2.MeanStdDev(image, out mean, out stddev);
+                result.AppendLine($"\n全图统计:");
+                result.AppendLine($"  平均值: {mean.Val0:F1}");
+                result.AppendLine($"  标准差: {stddev.Val0:F1}");
+
+                double minVal, maxVal;
+                OpenCvSharp.Point minLoc, maxLoc;
+                Cv2.MinMaxLoc(image, out minVal, out maxVal, out minLoc, out maxLoc);
+                result.AppendLine($"  最小值: {minVal:F0}");
+                result.AppendLine($"  最大值: {maxVal:F0}");
+                result.AppendLine($"  动态范围: {maxVal - minVal:F0}");
+
+                return result.ToString();
+            }
+            catch (Exception ex)
+            {
+                return $"{imageName} 基础信息生成失败: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// 显示对比分析报告
+        /// </summary>
+        private void DisplayComparisonReports()
+        {
+            // 显示原图对比报告（保持基础信息）
+            if (originalImage != null)
+            {
+                originalAnalysisTextBox.Text = GenerateBasicImageReport(originalImage, "原图");
+            }
+
+            // 显示增强图1对比报告
+            if (enhancedImage != null && originalVsEnhanced1Result.HasValue)
+            {
+                string enhanced1Report = GenerateComparisonReport(originalVsEnhanced1Result.Value, "增强图1", "原图");
+
+                // 添加增强图1 vs 增强图2的对比结果
+                if (enhanced1VsEnhanced2Result.HasValue)
+                {
+                    enhanced1Report += "\n" + GenerateEnhancedComparisonSection(enhanced1VsEnhanced2Result.Value, "增强图1", "增强图2");
+                }
+
+                enhanced1AnalysisTextBox.Text = enhanced1Report;
+            }
+
+            // 显示增强图2对比报告
+            if (enhanced2Image != null && originalVsEnhanced2Result.HasValue)
+            {
+                string enhanced2Report = GenerateComparisonReport(originalVsEnhanced2Result.Value, "增强图2", "原图");
+
+                // 添加增强图1 vs 增强图2的对比结果（相同内容）
+                if (enhanced1VsEnhanced2Result.HasValue)
+                {
+                    enhanced2Report += "\n" + GenerateEnhancedComparisonSection(enhanced1VsEnhanced2Result.Value, "增强图2", "增强图1");
+                }
+
+                enhanced2AnalysisTextBox.Text = enhanced2Report;
+            }
+        }
+
+        /// <summary>
+        /// 生成对比分析报告
+        /// </summary>
+        private string GenerateComparisonReport(ComprehensiveAnalysisResult result, string targetName, string baseName)
+        {
+            try
+            {
+                StringBuilder report = new StringBuilder();
+                report.AppendLine($"=== {targetName} vs {baseName} 对比分析 ===\n");
+
+                // ROI技术评分
+                report.AppendLine($"ROI技术评分: {result.ROITechnicalScore:F1}");
+                report.AppendLine($"全图技术评分: {result.FullImageTechnicalScore:F1}");
+
+                // 质量指标
+                report.AppendLine($"\nROI质量指标:");
+                report.AppendLine($"  PSNR: {result.ROIQualityMetrics.PSNR:F2} dB");
+                report.AppendLine($"  SSIM: {result.ROIQualityMetrics.SSIM:F4}");
+                report.AppendLine($"  边缘质量: {result.ROIQualityMetrics.EdgeQuality:F2}");
+                report.AppendLine($"  过度增强评分: {result.ROIQualityMetrics.OverEnhancementScore:F2}");
+
+                // 医学影像指标
+                report.AppendLine($"\nROI医学影像指标:");
+                report.AppendLine($"  信息保持度: {result.ROIMedicalMetrics.InformationPreservation:F2}");
+                report.AppendLine($"  细节保真度: {result.ROIMedicalMetrics.DetailFidelity:F2}");
+                report.AppendLine($"  动态范围利用: {result.ROIMedicalMetrics.DynamicRangeUtilization:F2}");
+                report.AppendLine($"  局部对比度增强: {result.ROIMedicalMetrics.LocalContrastEnhancement:F2}");
+
+                // 缺陷检测指标
+                report.AppendLine($"\nROI缺陷检测指标:");
+                report.AppendLine($"  细线缺陷可见性: {result.ROIDetectionMetrics.ThinLineVisibility:F2}");
+                report.AppendLine($"  背景噪声抑制: {result.ROIDetectionMetrics.BackgroundNoiseReduction:F2}");
+                report.AppendLine($"  缺陷背景对比度: {result.ROIDetectionMetrics.DefectBackgroundContrast:F2}");
+                report.AppendLine($"  综合适用性: {result.ROIDetectionMetrics.OverallSuitability:F2}");
+
+                return report.ToString();
+            }
+            catch (Exception ex)
+            {
+                return $"{targetName} vs {baseName} 对比报告生成失败: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// 生成增强图间对比部分
+        /// </summary>
+        private string GenerateEnhancedComparisonSection(ComprehensiveAnalysisResult result, string viewerName, string compareName)
+        {
+            try
+            {
+                StringBuilder section = new StringBuilder();
+                section.AppendLine($"=== 增强图对比报告 ===");
+                section.AppendLine($"{viewerName} vs {compareName}\n");
+
+                // 综合评分对比
+                section.AppendLine($"ROI技术评分差异: {result.ROITechnicalScore:F1}");
+                section.AppendLine($"全图技术评分差异: {result.FullImageTechnicalScore:F1}");
+
+                // 推荐结论
+                string recommendation = "";
+                if (result.ROITechnicalScore > 5)
+                {
+                    recommendation = viewerName == "增强图1" ? "推荐增强图1" : "推荐增强图2";
+                }
+                else if (result.ROITechnicalScore < -5)
+                {
+                    recommendation = viewerName == "增强图1" ? "推荐增强图2" : "推荐增强图1";
+                }
+                else
+                {
+                    recommendation = "两种增强效果相近";
+                }
+
+                section.AppendLine($"\n推荐结论: {recommendation}");
+
+                // 主要差异分析
+                section.AppendLine($"\n主要差异:");
+                if (Math.Abs(result.ROIQualityMetrics.PSNR) > 1)
+                    section.AppendLine($"  PSNR差异: {result.ROIQualityMetrics.PSNR:F2} dB");
+                if (Math.Abs(result.ROIQualityMetrics.SSIM) > 0.01)
+                    section.AppendLine($"  SSIM差异: {result.ROIQualityMetrics.SSIM:F4}");
+                if (Math.Abs(result.ROIQualityMetrics.EdgeQuality) > 0.1)
+                    section.AppendLine($"  边缘质量差异: {result.ROIQualityMetrics.EdgeQuality:F2}");
+                if (Math.Abs(result.ROIMedicalMetrics.LocalContrastEnhancement) > 0.1)
+                    section.AppendLine($"  局部对比度差异: {result.ROIMedicalMetrics.LocalContrastEnhancement:F2}");
+
+                return section.ToString();
+            }
+            catch (Exception ex)
+            {
+                return $"增强图对比部分生成失败: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// 在新的列布局中显示结果
+        /// </summary>
+        private void DisplayColumnResults()
+        {
+            try
+            {
+                // 显示原图分析结果
+                if (originalImage != null)
+                {
+                    DisplayOriginalImageResults();
+                }
+
+                // 显示增强图1分析结果
+                if (enhancedImage != null)
+                {
+                    DisplayEnhanced1ImageResults();
+                }
+
+                // 显示增强图2分析结果
+                if (enhanced2Image != null)
+                {
+                    DisplayEnhanced2ImageResults();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"显示结果时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// 显示原图分析结果
+        /// </summary>
+        private void DisplayOriginalImageResults()
+        {
+            // 显示原图直方图
+            DisplayHistogramForImage(originalImage, originalHistogramChart, "原图");
+
+            // 显示原图像素映射（与增强图对比）
+            if (enhancedImage != null)
+            {
+                DisplayPixelMappingForImages(originalImage, enhancedImage, originalPixelMappingChart, "原图 vs 增强图1");
+            }
+
+            // 显示原图分析文本
+            DisplayAnalysisTextForImage(originalImage, originalAnalysisTextBox, "原图");
+        }
+
+        /// <summary>
+        /// 显示增强图1分析结果
+        /// </summary>
+        private void DisplayEnhanced1ImageResults()
+        {
+            // 显示增强图1直方图
+            DisplayHistogramForImage(enhancedImage, enhanced1HistogramChart, "增强图1");
+
+            // 显示增强图1像素映射（与原图对比）
+            DisplayPixelMappingForImages(originalImage, enhancedImage, enhanced1PixelMappingChart, "增强图1 vs 原图");
+
+            // 显示增强图1分析文本
+            DisplayAnalysisTextForImage(enhancedImage, enhanced1AnalysisTextBox, "增强图1");
+        }
+
+        /// <summary>
+        /// 显示增强图2分析结果
+        /// </summary>
+        private void DisplayEnhanced2ImageResults()
+        {
+            // 显示增强图2直方图
+            DisplayHistogramForImage(enhanced2Image, enhanced2HistogramChart, "增强图2");
+
+            // 显示增强图2像素映射（与原图对比）
+            DisplayPixelMappingForImages(originalImage, enhanced2Image, enhanced2PixelMappingChart, "增强图2 vs 原图");
+
+            // 显示增强图2分析文本
+            DisplayAnalysisTextForImage(enhanced2Image, enhanced2AnalysisTextBox, "增强图2");
+        }
+
+        /// <summary>
+        /// 为单个图像显示直方图（支持16位数据）
+        /// </summary>
+        private void DisplayHistogramForImage(Mat image, Chart chart, string imageName)
+        {
+            try
+            {
+                chart.Series.Clear();
+                chart.Legends.Clear();
+
+                // 检测图像位深
+                bool is16Bit = image.Type() == MatType.CV_16UC1;
+                int maxValue = is16Bit ? 65535 : 255;
+                int binCount = is16Bit ? 256 : 256; // 16位图像分组为256个bin以便显示
+
+                // 计算直方图
+                Mat hist = new Mat();
+                int[] histSize = { binCount };
+                Rangef[] ranges = { new Rangef(0, maxValue + 1) };
+                Cv2.CalcHist(new Mat[] { image }, new int[] { 0 }, null, hist, 1, histSize, ranges);
+
+                // 创建系列
+                var series = new Series(imageName)
+                {
+                    ChartType = SeriesChartType.Line,
+                    Color = GetColorForImage(imageName),
+                    BorderWidth = 2
+                };
+
+                // 添加数据点
+                double binWidth = (double)maxValue / binCount;
+                for (int i = 0; i < binCount; i++)
+                {
+                    float value = hist.Get<float>(i);
+                    double binCenter = (i + 0.5) * binWidth;
+                    series.Points.AddXY(binCenter, value);
+                }
+
+                chart.Series.Add(series);
+
+                // 设置图表区域
+                if (chart.ChartAreas.Count > 0)
+                {
+                    chart.ChartAreas[0].AxisX.Title = $"灰度值 (0-{maxValue})";
+                    chart.ChartAreas[0].AxisY.Title = "像素数量";
+                    chart.ChartAreas[0].AxisX.Minimum = 0;
+                    chart.ChartAreas[0].AxisX.Maximum = maxValue;
+
+                    // 设置X轴刻度，16位图像使用更少的刻度以保持可读性
+                    if (is16Bit)
+                    {
+                        chart.ChartAreas[0].AxisX.Interval = 8192; // 每8192一个刻度
+                        chart.ChartAreas[0].AxisX.LabelStyle.Format = "N0";
+                    }
+                }
+
+                // 强制刷新图表
+                chart.Invalidate();
+                chart.Update();
+
+                hist.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"显示{imageName}直方图时出错: {ex.Message}");
+                // 在图表上显示错误信息
+                chart.Series.Clear();
+                chart.Titles.Clear();
+                chart.Titles.Add($"直方图显示错误: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 为两个图像显示像素映射关系（改进版：曲线+差值显示）
+        /// </summary>
+        private void DisplayPixelMappingForImages(Mat sourceImage, Mat targetImage, Chart chart, string title)
+        {
+            try
+            {
+                chart.Series.Clear();
+                chart.Legends.Clear();
+
+                // 检测图像位深
+                bool is16Bit = sourceImage.Type() == MatType.CV_16UC1;
+                int maxValue = is16Bit ? 65535 : 255;
+
+                // 收集映射数据
+                var mappingData = CollectMappingDataForCurve(sourceImage, targetImage, is16Bit);
+
+                // 1. 创建映射曲线系列
+                var curveSeries = new Series("映射曲线")
+                {
+                    ChartType = SeriesChartType.Line,
+                    Color = Color.Blue,
+                    BorderWidth = 3,
+                    MarkerStyle = MarkerStyle.None
+                };
+
+                // 2. 创建理想对角线参考
+                var referenceSeries = new Series("理想映射(y=x)")
+                {
+                    ChartType = SeriesChartType.Line,
+                    Color = Color.Gray,
+                    BorderWidth = 1,
+                    BorderDashStyle = ChartDashStyle.Dash,
+                    MarkerStyle = MarkerStyle.None
+                };
+
+                // 3. 创建变化区域高亮
+                var changeSeries = new Series("显著变化区域")
+                {
+                    ChartType = SeriesChartType.Point,
+                    Color = Color.Red,
+                    MarkerSize = 3,
+                    MarkerStyle = MarkerStyle.Circle
+                };
+
+                // 添加映射曲线数据
+                foreach (var point in mappingData.OrderBy(x => x.Key))
+                {
+                    curveSeries.Points.AddXY(point.Key, point.Value);
+
+                    // 标记显著变化的点（差值超过阈值）
+                    int difference = Math.Abs(point.Value - point.Key);
+                    int threshold = is16Bit ? 1000 : 10;  // 16位图像阈值1000，8位图像阈值10
+
+                    if (difference > threshold)
+                    {
+                        changeSeries.Points.AddXY(point.Key, point.Value);
+                    }
+                }
+
+                // 添加理想对角线
+                referenceSeries.Points.AddXY(0, 0);
+                referenceSeries.Points.AddXY(maxValue, maxValue);
+
+                // 添加系列到图表
+                chart.Series.Add(curveSeries);
+                chart.Series.Add(referenceSeries);
+                if (changeSeries.Points.Count > 0)
+                {
+                    chart.Series.Add(changeSeries);
+                }
+
+                // 设置图表区域
+                if (chart.ChartAreas.Count > 0)
+                {
+                    chart.ChartAreas[0].AxisX.Title = $"原始像素值 (0-{maxValue})";
+                    chart.ChartAreas[0].AxisY.Title = $"增强像素值 (0-{maxValue})";
+                    chart.ChartAreas[0].AxisX.Minimum = 0;
+                    chart.ChartAreas[0].AxisX.Maximum = maxValue;
+                    chart.ChartAreas[0].AxisY.Minimum = 0;
+                    chart.ChartAreas[0].AxisY.Maximum = maxValue;
+
+                    // 16位图像设置合适的刻度间隔
+                    if (is16Bit)
+                    {
+                        chart.ChartAreas[0].AxisX.Interval = 8192;
+                        chart.ChartAreas[0].AxisY.Interval = 8192;
+                        chart.ChartAreas[0].AxisX.LabelStyle.Format = "N0";
+                        chart.ChartAreas[0].AxisY.LabelStyle.Format = "N0";
+                    }
+                }
+
+                // 添加图例
+                chart.Legends.Add(new Legend("映射关系")
+                {
+                    Docking = Docking.Top,
+                    Alignment = StringAlignment.Center
+                });
+
+                // 设置标题
+                chart.Titles.Clear();
+                chart.Titles.Add(title);
+
+                // 强制刷新图表
+                chart.Invalidate();
+                chart.Update();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"显示像素映射时出错: {ex.Message}");
+                // 在图表上显示错误信息
+                chart.Series.Clear();
+                chart.Titles.Clear();
+                chart.Titles.Add($"像素映射显示错误: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 收集映射数据用于曲线显示（智能分组和平滑）
+        /// </summary>
+        private Dictionary<int, int> CollectMappingDataForCurve(Mat sourceImage, Mat targetImage, bool is16Bit)
+        {
+            var mappingGroups = new Dictionary<int, List<int>>();
+            int maxValue = is16Bit ? 65535 : 255;
+
+            // 分组大小：16位图像分256组，8位图像不分组
+            int groupSize = is16Bit ? 256 : 1;
+
+            // 采样策略：更密集的采样以获得更平滑的曲线
+            int totalPixels = sourceImage.Width * sourceImage.Height;
+            int targetSamples = 10000;  // 增加采样点数
+            int step = Math.Max(1, (int)Math.Sqrt(totalPixels / targetSamples));
+
+            for (int y = 0; y < sourceImage.Height; y += step)
+            {
+                for (int x = 0; x < sourceImage.Width; x += step)
+                {
+                    if (x < sourceImage.Width && y < sourceImage.Height)
+                    {
+                        int sourceVal, targetVal;
+
+                        if (is16Bit)
+                        {
+                            sourceVal = sourceImage.Get<ushort>(y, x);
+                            targetVal = targetImage.Get<ushort>(y, x);
+                        }
+                        else
+                        {
+                            sourceVal = sourceImage.Get<byte>(y, x);
+                            targetVal = targetImage.Get<byte>(y, x);
+                        }
+
+                        // 分组处理
+                        int groupKey = (sourceVal / groupSize) * groupSize;
+
+                        if (!mappingGroups.ContainsKey(groupKey))
+                            mappingGroups[groupKey] = new List<int>();
+
+                        mappingGroups[groupKey].Add(targetVal);
+                    }
+                }
+            }
+
+            // 计算每组的平均值，生成平滑曲线
+            var result = new Dictionary<int, int>();
+            foreach (var group in mappingGroups)
+            {
+                if (group.Value.Count > 0)
+                {
+                    result[group.Key] = (int)group.Value.Average();
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 显示像素值变化差值图（可选的替代显示方式）
+        /// </summary>
+        private void DisplayPixelMappingAsDifference(Mat sourceImage, Mat targetImage, Chart chart, string title)
+        {
+            try
+            {
+                chart.Series.Clear();
+                chart.Legends.Clear();
+
+                // 检测图像位深
+                bool is16Bit = sourceImage.Type() == MatType.CV_16UC1;
+                int maxValue = is16Bit ? 65535 : 255;
+
+                // 收集映射数据
+                var mappingData = CollectMappingDataForCurve(sourceImage, targetImage, is16Bit);
+
+                // 创建差值曲线系列
+                var differenceSeries = new Series("像素值变化")
+                {
+                    ChartType = SeriesChartType.Line,
+                    Color = Color.Red,
+                    BorderWidth = 2,
+                    MarkerStyle = MarkerStyle.None
+                };
+
+                // 创建零线参考
+                var zeroLineSeries = new Series("无变化线")
+                {
+                    ChartType = SeriesChartType.Line,
+                    Color = Color.Gray,
+                    BorderWidth = 1,
+                    BorderDashStyle = ChartDashStyle.Dash,
+                    MarkerStyle = MarkerStyle.None
+                };
+
+                // 添加差值数据
+                foreach (var point in mappingData.OrderBy(x => x.Key))
+                {
+                    int difference = point.Value - point.Key;  // 计算差值
+                    differenceSeries.Points.AddXY(point.Key, difference);
+                }
+
+                // 添加零线
+                zeroLineSeries.Points.AddXY(0, 0);
+                zeroLineSeries.Points.AddXY(maxValue, 0);
+
+                // 添加系列到图表
+                chart.Series.Add(differenceSeries);
+                chart.Series.Add(zeroLineSeries);
+
+                // 设置图表区域
+                if (chart.ChartAreas.Count > 0)
+                {
+                    chart.ChartAreas[0].AxisX.Title = $"原始像素值 (0-{maxValue})";
+                    chart.ChartAreas[0].AxisY.Title = "像素值变化量 (增强值 - 原值)";
+                    chart.ChartAreas[0].AxisX.Minimum = 0;
+                    chart.ChartAreas[0].AxisX.Maximum = maxValue;
+
+                    // 16位图像设置合适的刻度间隔
+                    if (is16Bit)
+                    {
+                        chart.ChartAreas[0].AxisX.Interval = 8192;
+                        chart.ChartAreas[0].AxisX.LabelStyle.Format = "N0";
+                    }
+                }
+
+                // 添加图例
+                chart.Legends.Add(new Legend("变化关系")
+                {
+                    Docking = Docking.Top,
+                    Alignment = StringAlignment.Center
+                });
+
+                // 设置标题
+                chart.Titles.Clear();
+                chart.Titles.Add(title + " - 变化量视图");
+
+                // 强制刷新图表
+                chart.Invalidate();
+                chart.Update();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"显示像素变化差值时出错: {ex.Message}");
+                chart.Series.Clear();
+                chart.Titles.Clear();
+                chart.Titles.Add($"差值显示错误: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 为图像显示分析文本
+        /// </summary>
+        private void DisplayAnalysisTextForImage(Mat image, RichTextBox textBox, string imageName)
+        {
+            try
+            {
+                StringBuilder result = new StringBuilder();
+                result.AppendLine($"=== {imageName} 分析结果 ===\n");
+
+                // 基本信息
+                result.AppendLine($"图像尺寸: {image.Width} × {image.Height}");
+                result.AppendLine($"图像类型: {image.Type()}");
+                result.AppendLine($"通道数: {image.Channels()}");
+
+                // 统计信息
+                Scalar mean, stddev;
+                Cv2.MeanStdDev(image, out mean, out stddev);
+                result.AppendLine($"平均值: {mean.Val0:F2}");
+                result.AppendLine($"标准差: {stddev.Val0:F2}");
+
+                // 最值信息
+                double minVal, maxVal;
+                Cv2.MinMaxLoc(image, out minVal, out maxVal);
+                result.AppendLine($"最小值: {minVal:F0}");
+                result.AppendLine($"最大值: {maxVal:F0}");
+                result.AppendLine($"动态范围: {maxVal - minVal:F0}");
+
+                // 如果有分析结果，添加质量指标
+                if (analysisResult != null)
+                {
+                    result.AppendLine("\n=== 质量指标 ===");
+                    if (imageName.Contains("增强"))
+                    {
+                        result.AppendLine($"对比度比率: {analysisResult.ContrastRatio:F2}");
+                        result.AppendLine($"亮度变化: {analysisResult.BrightnessChange:F2}");
+                        result.AppendLine($"Gamma估值: {analysisResult.GammaEstimate:F2}");
+                        result.AppendLine($"推荐算法: {analysisResult.SuggestedAlgorithm}");
+                    }
+                }
+
+                textBox.Text = result.ToString();
+            }
+            catch (Exception ex)
+            {
+                textBox.Text = $"显示{imageName}分析结果时出错: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// 根据图像名称获取对应的颜色
+        /// </summary>
+        private Color GetColorForImage(string imageName)
+        {
+            if (imageName.Contains("原图"))
+                return Color.Blue;
+            else if (imageName.Contains("增强图1"))
+                return Color.Green;
+            else if (imageName.Contains("增强图2"))
+                return Color.Red;
+            else
+                return Color.Black;
+        }
+
+        /// <summary>
+        /// 显示直方图（旧版本，保留兼容性）
+        /// </summary>
+        private void DisplayHistogram_Deprecated()
         {
             try
             {
@@ -626,9 +1935,9 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 显示像素映射关系（优化版：修复16位图像灰度值显示问题）
+        /// 显示像素映射关系（旧版本，保留兼容性）
         /// </summary>
-        private void DisplayPixelMapping()
+        private void DisplayPixelMapping_Deprecated()
         {
             try
             {
@@ -759,7 +2068,7 @@ namespace ImageAnalysisTool.UI.Forms
             }
         }
 
-        private void DisplayTextResults()
+        private void DisplayTextResults_Deprecated()
         {
             var result = analysisResult;
             var text = $@"=== 图像增强分析报告 ===
@@ -838,62 +2147,137 @@ namespace ImageAnalysisTool.UI.Forms
             Mat colorDisplay = new Mat();
             Cv2.CvtColor(display8bit, colorDisplay, ColorConversionCodes.GRAY2BGR);
 
-            // 使用OTSU阈值分割来区分工件区域和过曝区域
-            Mat binary = new Mat();
-            double threshold = Cv2.Threshold(originalImage, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+            // 获取当前ROI模式
+            ROIMode mode = GetSelectedROIMode();
 
-            // 转换为8位掩码
-            Mat binary8 = new Mat();
-            binary.ConvertTo(binary8, MatType.CV_8U);
+            // 根据模式创建ROI掩码
+            Mat roiMask = CreateIndustrialROIMask(originalImage, mode);
 
-            // 创建工件区域掩码（反转二值图像）
-            Mat workpieceMask8 = new Mat();
-            Cv2.BitwiseNot(binary8, workpieceMask8);
-
-            // 查找工件轮廓
-            OpenCvSharp.Point[][] contours;
-            Cv2.FindContours(workpieceMask8, out contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
-
-            // 绘制工件轮廓（绿色）
-            if (contours.Length > 0)
+            // 根据模式显示不同的可视化信息
+            if (mode == ROIMode.Weld)
             {
-                // 找到最大的轮廓（主要工件）
-                double maxArea = 0;
-                int maxContourIndex = 0;
-                for (int i = 0; i < contours.Length; i++)
-                {
-                    double area = Cv2.ContourArea(contours[i]);
-                    if (area > maxArea)
-                    {
-                        maxArea = area;
-                        maxContourIndex = i;
-                    }
-                }
-
-                // 绘制主要工件轮廓
-                Cv2.DrawContours(colorDisplay, contours, maxContourIndex, new Scalar(0, 255, 0), 3); // 绿色，3像素宽
-
-                // 绘制工件边界框（红色）
-                Rect boundingRect = Cv2.BoundingRect(contours[maxContourIndex]);
-                Cv2.Rectangle(colorDisplay, boundingRect, new Scalar(0, 0, 255), 2); // 红色，2像素宽
-
-                // 添加文字标注
-                string roiInfo = $"ROI: {boundingRect.Width}x{boundingRect.Height}";
-                Cv2.PutText(colorDisplay, roiInfo, new OpenCvSharp.Point(boundingRect.X, boundingRect.Y - 10),
-                           HersheyFonts.HersheySimplex, 0.7, new Scalar(0, 0, 255), 2);
-
-                string thresholdInfo = $"Threshold: {threshold:F0}";
-                Cv2.PutText(colorDisplay, thresholdInfo, new OpenCvSharp.Point(10, 30),
-                           HersheyFonts.HersheySimplex, 0.7, new Scalar(255, 255, 0), 2);
+                DrawWeldROIVisualization(colorDisplay, originalImage, roiMask);
+            }
+            else
+            {
+                DrawGeneralROIVisualization(colorDisplay, originalImage, roiMask);
             }
 
             // 清理临时Mat对象
             display8bit.Dispose();
-            binary.Dispose();
-            binary8.Dispose();
-            workpieceMask8.Dispose();
 
             return colorDisplay;
+        }
+
+        /// <summary>
+        /// 绘制通用ROI可视化
+        /// </summary>
+        private void DrawGeneralROIVisualization(Mat colorDisplay, Mat originalImage, Mat roiMask)
+        {
+            // 找到工件轮廓
+            OpenCvSharp.Point[][] contours;
+            HierarchyIndex[] hierarchy;
+            Cv2.FindContours(roiMask, out contours, out hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+
+            // 绘制工件轮廓（绿色）
+            for (int i = 0; i < contours.Length; i++)
+            {
+                Cv2.DrawContours(colorDisplay, contours, i, Scalar.Green, 2);
+            }
+
+            // 计算并绘制工件边界框（红色）
+            if (contours.Length > 0)
+            {
+                var allPoints = contours.SelectMany(c => c).ToArray();
+                if (allPoints.Length > 0)
+                {
+                    var boundingRect = Cv2.BoundingRect(allPoints);
+                    Cv2.Rectangle(colorDisplay, boundingRect, Scalar.Red, 3);
+                }
+            }
+
+            // 添加阈值信息文字（黄色）
+            Mat binary = new Mat();
+            double threshold = Cv2.Threshold(originalImage, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+            string thresholdInfo = $"通用模式 - OTSU阈值: {threshold:F0}";
+            Cv2.PutText(colorDisplay, thresholdInfo, new OpenCvSharp.Point(10, 30),
+                HersheyFonts.HersheySimplex, 0.8, Scalar.Yellow, 2);
+
+            // 计算ROI区域占比
+            int roiPixels = Cv2.CountNonZero(roiMask);
+            double roiRatio = (double)roiPixels / (originalImage.Width * originalImage.Height) * 100;
+            string roiInfo = $"ROI区域占比: {roiRatio:F1}%";
+            Cv2.PutText(colorDisplay, roiInfo, new OpenCvSharp.Point(10, 70),
+                HersheyFonts.HersheySimplex, 0.8, Scalar.Yellow, 2);
+
+            binary.Dispose();
+        }
+
+        /// <summary>
+        /// 绘制焊缝ROI可视化
+        /// </summary>
+        private void DrawWeldROIVisualization(Mat colorDisplay, Mat originalImage, Mat roiMask)
+        {
+            // 找到焊缝轮廓
+            OpenCvSharp.Point[][] contours;
+            HierarchyIndex[] hierarchy;
+            Cv2.FindContours(roiMask, out contours, out hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+
+            // 绘制焊缝轮廓（蓝色，区别于通用模式）
+            for (int i = 0; i < contours.Length; i++)
+            {
+                Cv2.DrawContours(colorDisplay, contours, i, Scalar.Blue, 2);
+            }
+
+            // 计算并绘制焊缝边界框（橙色）
+            if (contours.Length > 0)
+            {
+                var allPoints = contours.SelectMany(c => c).ToArray();
+                if (allPoints.Length > 0)
+                {
+                    var boundingRect = Cv2.BoundingRect(allPoints);
+                    Cv2.Rectangle(colorDisplay, boundingRect, new Scalar(0, 165, 255), 3); // 橙色
+                }
+            }
+
+            // 计算双阈值信息
+            Mat binary1 = new Mat();
+            double threshold1 = Cv2.Threshold(originalImage, binary1, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+            double threshold2 = threshold1 * 1.2;
+
+            // 添加焊缝检测信息文字（青色）
+            string weldInfo = $"焊缝模式 - 低阈值: {threshold1:F0}, 高阈值: {threshold2:F0}";
+            Cv2.PutText(colorDisplay, weldInfo, new OpenCvSharp.Point(10, 30),
+                HersheyFonts.HersheySimplex, 0.7, Scalar.Cyan, 2);
+
+            // 计算焊缝区域占比
+            int weldPixels = Cv2.CountNonZero(roiMask);
+            double weldRatio = (double)weldPixels / (originalImage.Width * originalImage.Height) * 100;
+            string roiInfo = $"焊缝区域占比: {weldRatio:F1}%";
+            Cv2.PutText(colorDisplay, roiInfo, new OpenCvSharp.Point(10, 70),
+                HersheyFonts.HersheySimplex, 0.7, Scalar.Cyan, 2);
+
+            // 添加焊缝质量评估
+            string qualityInfo = GetWeldROIQualityAssessment(weldRatio, contours.Length);
+            Cv2.PutText(colorDisplay, qualityInfo, new OpenCvSharp.Point(10, 110),
+                HersheyFonts.HersheySimplex, 0.7, Scalar.Cyan, 2);
+
+            binary1.Dispose();
+        }
+
+        /// <summary>
+        /// 获取焊缝ROI质量评估
+        /// </summary>
+        private string GetWeldROIQualityAssessment(double weldRatio, int contourCount)
+        {
+            if (weldRatio < 10)
+                return "质量评估: 焊缝区域过小，可能检测不准确";
+            else if (weldRatio > 60)
+                return "质量评估: 焊缝区域过大，可能包含过多背景";
+            else if (contourCount > 10)
+                return "质量评估: 焊缝区域过于分散，建议调整参数";
+            else
+                return "质量评估: 焊缝区域检测良好";
         }
 
         /// <summary>
@@ -901,9 +2285,13 @@ namespace ImageAnalysisTool.UI.Forms
         /// </summary>
         private void ShowROIVisualizationWindow(Mat roiVisualization)
         {
+            // 根据当前ROI模式设置窗口标题
+            ROIMode mode = GetSelectedROIMode();
+            string windowTitle = mode == ROIMode.Weld ? "焊缝ROI区域可视化" : "通用ROI区域可视化";
+
             Form roiForm = new Form
             {
-                Text = "ROI区域可视化",
+                Text = windowTitle,
                 Size = new System.Drawing.Size(800, 600),
                 StartPosition = FormStartPosition.CenterParent
             };
@@ -915,9 +2303,15 @@ namespace ImageAnalysisTool.UI.Forms
                 Image = roiVisualization.ToBitmap()
             };
 
+            // 根据当前ROI模式显示不同的说明信息
+            ROIMode currentMode = GetSelectedROIMode();
+            string infoText = currentMode == ROIMode.Weld
+                ? "蓝色线条：焊缝轮廓  |  橙色框：焊缝边界框  |  青色文字：焊缝检测信息"
+                : "绿色线条：工件轮廓  |  红色框：工件边界框  |  黄色文字：阈值信息";
+
             Label infoLabel = new Label
             {
-                Text = "绿色线条：工件轮廓  |  红色框：工件边界框  |  黄色文字：阈值信息",
+                Text = infoText,
                 Dock = DockStyle.Bottom,
                 Height = 30,
                 TextAlign = ContentAlignment.MiddleCenter,
@@ -931,20 +2325,20 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 显示灰度值分布分析
+        /// 显示灰度值分布分析（旧版本，保留兼容性）
         /// </summary>
-        private void DisplayGrayValueAnalysis()
+        private void DisplayGrayValueAnalysis_Deprecated()
         {
             var text = "=== 灰度值分布分析 ===\n\n";
 
             // 分析原图灰度值分布
             text += "【原图灰度值分析】\n";
-            text += AnalyzeImageGrayValues(originalImage, "原图");
+            text += AnalyzeImageGrayValuesBasic(originalImage, "原图");
             text += "\n";
 
             // 分析增强后图像灰度值分布
             text += "【增强后灰度值分析】\n";
-            text += AnalyzeImageGrayValues(enhancedImage, "增强后");
+            text += AnalyzeImageGrayValuesBasic(enhancedImage, "增强后");
             text += "\n";
 
             // 边缘区域特别分析
@@ -970,9 +2364,9 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 分析图像的灰度值分布
+        /// 分析图像的基础灰度值分布（旧版本，用于兼容）
         /// </summary>
-        private string AnalyzeImageGrayValues(Mat image, string imageName)
+        private string AnalyzeImageGrayValuesBasic(Mat image, string imageName)
         {
             if (image == null) return $"{imageName}: 未加载\n";
 
@@ -1490,8 +2884,8 @@ namespace ImageAnalysisTool.UI.Forms
         {
             var config = AnalysisConfiguration.Default;
 
-            // 创建ROI掩码（使用现有的ROI检测逻辑）
-            Mat roiMask = CreateROIMask(original);
+            // 创建ROI掩码（统一使用通用OTSU方法）
+            Mat roiMask = CreateROIMaskForAnalysis(original);
 
             // 执行ROI区域分析
             var roiQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(original, enhanced, config, roiMask);
@@ -1546,29 +2940,104 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 创建ROI掩码（使用现有的OTSU阈值方法）
+        /// 创建ROI掩码（支持多种模式）
         /// </summary>
         private Mat CreateROIMask(Mat image)
         {
+            // 获取当前选择的ROI模式
+            ROIMode mode = GetSelectedROIMode();
+            return CreateIndustrialROIMask(image, mode);
+        }
+
+        /// <summary>
+        /// 获取当前选择的ROI模式
+        /// </summary>
+        private ROIMode GetSelectedROIMode()
+        {
+            if (roiModeComboBox?.SelectedIndex == 1)
+                return ROIMode.Weld;
+            return ROIMode.General;
+        }
+
+        /// <summary>
+        /// 创建工业X射线ROI掩码（支持通用和焊缝模式）
+        /// </summary>
+        private Mat CreateIndustrialROIMask(Mat image, ROIMode mode)
+        {
             try
             {
-                // 使用OTSU阈值分割来区分工件区域和过曝区域
-                Mat binary = new Mat();
-                double threshold = Cv2.Threshold(image, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-
-                // 创建掩码：保留低于阈值的区域（工件区域）
-                Mat mask = new Mat();
-                Cv2.Threshold(image, mask, threshold * 0.8, 255, ThresholdTypes.BinaryInv);
-                mask.ConvertTo(mask, MatType.CV_8UC1, 1.0 / 256.0);
-
-                binary.Dispose();
-                return mask;
+                if (mode == ROIMode.Weld)
+                {
+                    // 使用WeldDefectEnhancer的焊缝ROI检测算法
+                    return CreateWeldROIMask(image);
+                }
+                else
+                {
+                    // 使用通用OTSU阈值方法
+                    return CreateGeneralROIMask(image);
+                }
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine($"创建ROI掩码失败: {ex.Message}");
                 // 如果出错，返回全图掩码
                 return Mat.Ones(image.Size(), MatType.CV_8UC1);
             }
+        }
+
+        /// <summary>
+        /// 创建通用ROI掩码（原有的OTSU方法）
+        /// </summary>
+        private Mat CreateGeneralROIMask(Mat image)
+        {
+            // 使用OTSU阈值分割来区分工件区域和过曝区域
+            Mat binary = new Mat();
+            double threshold = Cv2.Threshold(image, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+
+            // 创建掩码：保留低于阈值的区域（工件区域）
+            Mat mask = new Mat();
+            Cv2.Threshold(image, mask, threshold * 0.8, 255, ThresholdTypes.BinaryInv);
+            mask.ConvertTo(mask, MatType.CV_8UC1, 1.0 / 256.0);
+
+            binary.Dispose();
+            return mask;
+        }
+
+        /// <summary>
+        /// 创建焊缝专用ROI掩码（基于WeldDefectEnhancer算法）
+        /// </summary>
+        private Mat CreateWeldROIMask(Mat image)
+        {
+            // 使用双阈值方法检测焊缝区域
+            Mat binary1 = new Mat();
+            Mat binary2 = new Mat();
+
+            // 第一个阈值：检测低灰度区域(焊缝和热影响区)
+            double threshold1 = Cv2.Threshold(image, binary1, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+
+            // 第二个阈值：检测中等灰度区域
+            double threshold2 = threshold1 * 1.2;
+            Cv2.Threshold(image, binary2, threshold2, 255, ThresholdTypes.Binary);
+
+            // 组合两个阈值结果，创建焊缝区域掩码
+            Mat weldMask = new Mat();
+            Cv2.BitwiseOr(binary1, binary2, weldMask);
+            Cv2.BitwiseNot(weldMask, weldMask); // 反转，焊缝区域为白色
+
+            // 形态学操作优化掩码
+            Mat kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(3, 3));
+            Cv2.MorphologyEx(weldMask, weldMask, MorphTypes.Close, kernel);
+            Cv2.MorphologyEx(weldMask, weldMask, MorphTypes.Open, kernel);
+
+            // 转换为8位掩码
+            weldMask.ConvertTo(weldMask, MatType.CV_8UC1);
+
+            // 清理资源
+            binary1.Dispose();
+            binary2.Dispose();
+            kernel.Dispose();
+
+            return weldMask;
         }
 
         /// <summary>
@@ -1896,7 +3365,184 @@ namespace ImageAnalysisTool.UI.Forms
         {
             originalImage?.Dispose();
             enhancedImage?.Dispose();
+            enhanced2Image?.Dispose();
             base.OnFormClosed(e);
+        }
+        /// <summary>
+        /// 对比两个增强图的效果
+        /// </summary>
+        private ComparisonAnalysisResult CompareTwoEnhanced(Mat enhanced1, Mat enhanced2)
+        {
+            var config = AnalysisConfiguration.Default;
+            Mat roiMask = CreateROIMask(originalImage);
+
+            // 分析增强图1
+            var result1 = new ComprehensiveAnalysisResult
+            {
+                ROIQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced1, config, roiMask),
+                ROIMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced1, config, roiMask),
+                ROIDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(originalImage, enhanced1, config, roiMask),
+                FullImageQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced1, config, null),
+                FullImageMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced1, config, null),
+                FullImageDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(originalImage, enhanced1, config, null)
+            };
+
+            // 分析增强图2
+            var result2 = new ComprehensiveAnalysisResult
+            {
+                ROIQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced2, config, roiMask),
+                ROIMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced2, config, roiMask),
+                ROIDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(originalImage, enhanced2, config, roiMask),
+                FullImageQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced2, config, null),
+                FullImageMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced2, config, null),
+                FullImageDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(originalImage, enhanced2, config, null)
+            };
+
+            // 计算综合评分
+            result1.ROITechnicalScore = CalculateImageQualityScore(result1.ROIQualityMetrics);
+            result1.ROIMedicalScore = result1.ROIMedicalMetrics.OverallMedicalQuality;
+            result1.ROIDetectionScore = result1.ROIDetectionMetrics.OverallSuitability;
+            result1.ROIOverallRecommendation = (result1.ROITechnicalScore + result1.ROIMedicalScore + result1.ROIDetectionScore) / 3.0;
+
+            result2.ROITechnicalScore = CalculateImageQualityScore(result2.ROIQualityMetrics);
+            result2.ROIMedicalScore = result2.ROIMedicalMetrics.OverallMedicalQuality;
+            result2.ROIDetectionScore = result2.ROIDetectionMetrics.OverallSuitability;
+            result2.ROIOverallRecommendation = (result2.ROITechnicalScore + result2.ROIMedicalScore + result2.ROIDetectionScore) / 3.0;
+
+            // 生成对比总结
+            var summary = GenerateComparisonSummary(result1, result2);
+
+            roiMask?.Dispose();
+
+            return new ComparisonAnalysisResult
+            {
+                Enhanced1Result = result1,
+                Enhanced2Result = result2,
+                Summary = summary
+            };
+        }
+
+        /// <summary>
+        /// 生成对比总结
+        /// </summary>
+        private ComparisonSummary GenerateComparisonSummary(ComprehensiveAnalysisResult result1, ComprehensiveAnalysisResult result2)
+        {
+            var summary = new ComparisonSummary();
+
+            // 计算各项差异
+            summary.QualityDifference = result2.ROITechnicalScore - result1.ROITechnicalScore;
+            summary.MedicalDifference = result2.ROIMedicalScore - result1.ROIMedicalScore;
+            summary.DetectionDifference = result2.ROIDetectionScore - result1.ROIDetectionScore;
+            summary.OverallDifference = result2.ROIOverallRecommendation - result1.ROIOverallRecommendation;
+
+            // 确定推荐图像
+            if (Math.Abs(summary.OverallDifference) < 2.0)
+            {
+                summary.RecommendedImage = 0; // 差异很小，无明显推荐
+                summary.RecommendationReason = "两个增强图效果相近，可根据具体需求选择";
+            }
+            else if (summary.OverallDifference > 0)
+            {
+                summary.RecommendedImage = 2;
+                summary.RecommendationReason = GenerateRecommendationReason(result2, result1, "增强图2");
+            }
+            else
+            {
+                summary.RecommendedImage = 1;
+                summary.RecommendationReason = GenerateRecommendationReason(result1, result2, "增强图1");
+            }
+
+            return summary;
+        }
+
+        /// <summary>
+        /// 生成推荐理由
+        /// </summary>
+        private string GenerateRecommendationReason(ComprehensiveAnalysisResult better, ComprehensiveAnalysisResult worse, string imageName)
+        {
+            var reasons = new List<string>();
+
+            if (better.ROITechnicalScore - worse.ROITechnicalScore > 5)
+                reasons.Add("技术指标更优");
+            if (better.ROIMedicalScore - worse.ROIMedicalScore > 5)
+                reasons.Add("医学影像质量更佳");
+            if (better.ROIDetectionScore - worse.ROIDetectionScore > 5)
+                reasons.Add("缺陷检测适用性更强");
+
+            if (reasons.Count == 0)
+                return $"{imageName}在综合评估中略胜一筹";
+
+            return $"{imageName}在{string.Join("、", reasons)}方面表现更好";
+        }
+
+        /// <summary>
+        /// 计算图像质量综合评分
+        /// </summary>
+        private double CalculateImageQualityScore(ImageQualityMetrics metrics)
+        {
+            // 基于各项指标计算综合评分
+            double psnrScore = Math.Min(100, Math.Max(0, (metrics.PSNR - 20) * 2)); // PSNR > 20dB 为可接受
+            double ssimScore = metrics.SSIM * 100; // SSIM 0-1 转换为 0-100
+            double edgeScore = metrics.EdgeQuality; // 已经是 0-100
+            double overEnhancementPenalty = 100 - metrics.OverEnhancementScore; // 过度增强越低越好
+            double noisePenalty = Math.Max(0, 100 - (metrics.NoiseAmplification - 1.0) * 50); // 噪声放大越低越好
+            double haloPenalty = 100 - metrics.HaloEffect; // 光晕效应越低越好
+
+            // 加权平均
+            double weightedScore =
+                psnrScore * 0.25 +
+                ssimScore * 0.25 +
+                edgeScore * 0.20 +
+                overEnhancementPenalty * 0.15 +
+                noisePenalty * 0.10 +
+                haloPenalty * 0.05;
+
+            return Math.Max(0, Math.Min(100, weightedScore));
+        }
+
+        /// <summary>
+        /// 显示对比分析结果
+        /// </summary>
+        private void DisplayComparisonResults(ComparisonAnalysisResult comparisonResult)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=== 双图像对比分析结果 ===\n");
+
+            // 显示增强图1结果
+            sb.AppendLine("【增强图1分析结果】");
+            sb.AppendLine($"技术指标评分: {comparisonResult.Enhanced1Result.ROITechnicalScore:F1}");
+            sb.AppendLine($"医学影像评分: {comparisonResult.Enhanced1Result.ROIMedicalScore:F1}");
+            sb.AppendLine($"缺陷检测评分: {comparisonResult.Enhanced1Result.ROIDetectionScore:F1}");
+            sb.AppendLine($"综合推荐度: {comparisonResult.Enhanced1Result.ROIOverallRecommendation:F1}\n");
+
+            // 显示增强图2结果
+            sb.AppendLine("【增强图2分析结果】");
+            sb.AppendLine($"技术指标评分: {comparisonResult.Enhanced2Result.ROITechnicalScore:F1}");
+            sb.AppendLine($"医学影像评分: {comparisonResult.Enhanced2Result.ROIMedicalScore:F1}");
+            sb.AppendLine($"缺陷检测评分: {comparisonResult.Enhanced2Result.ROIDetectionScore:F1}");
+            sb.AppendLine($"综合推荐度: {comparisonResult.Enhanced2Result.ROIOverallRecommendation:F1}\n");
+
+            // 显示对比总结
+            sb.AppendLine("【对比总结】");
+            if (comparisonResult.Summary.RecommendedImage == 0)
+            {
+                sb.AppendLine("推荐结果: 两图效果相近");
+            }
+            else
+            {
+                sb.AppendLine($"推荐结果: 增强图{comparisonResult.Summary.RecommendedImage}");
+            }
+            sb.AppendLine($"推荐理由: {comparisonResult.Summary.RecommendationReason}");
+            sb.AppendLine($"综合评分差异: {comparisonResult.Summary.OverallDifference:F1}");
+
+            // 显示详细差异
+            sb.AppendLine("\n【详细差异分析】");
+            sb.AppendLine($"技术指标差异: {comparisonResult.Summary.QualityDifference:F1}");
+            sb.AppendLine($"医学影像差异: {comparisonResult.Summary.MedicalDifference:F1}");
+            sb.AppendLine($"缺陷检测差异: {comparisonResult.Summary.DetectionDifference:F1}");
+
+            // 在结果文本框中显示
+            resultTextBox.Text = sb.ToString();
         }
     }
 }
