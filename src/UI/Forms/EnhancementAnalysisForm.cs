@@ -14,6 +14,7 @@ using FellowOakDicom;
 using ImageAnalysisTool.Core.Analyzers;
 using ImageAnalysisTool.Core.Models;
 using ImageAnalysisTool.Core.Enhancers;
+using NLog;
 
 /// <summary>
 /// ROI检测模式枚举
@@ -40,11 +41,18 @@ namespace ImageAnalysisTool.UI.Forms
     /// </summary>
     public partial class EnhancementAnalysisForm : Form
     {
+        private static readonly Logger logger = LogManager.GetCurrentClassLogger();
+
         private ImageEnhancementAnalyzer analyzer;
         private Mat originalImage;
         private Mat enhancedImage;
         private Mat enhanced2Image;
         private ImageEnhancementAnalyzer.AnalysisResult analysisResult;
+
+        // 文件名存储
+        private string originalImageFileName = "";
+        private string enhancedImageFileName = "";
+        private string enhanced2ImageFileName = "";
 
         // 灰度值分析结果
         private string originalGrayValueAnalysis = "";
@@ -715,7 +723,7 @@ namespace ImageAnalysisTool.UI.Forms
                 Text = "全图",
                 Location = new System.Drawing.Point(5, 8),
                 Size = new System.Drawing.Size(50, 20),
-                
+                Checked = true, // 默认选择全图模式
                 Font = new Font("Arial", 8)
             };
             fullImageMappingRadio.CheckedChanged += MappingModeRadio_CheckedChanged;
@@ -725,7 +733,6 @@ namespace ImageAnalysisTool.UI.Forms
                 Text = "ROI",
                 Location = new System.Drawing.Point(60, 8),
                 Size = new System.Drawing.Size(50, 20),
-                Checked = true, // 默认选择ROI模式
                 Font = new Font("Arial", 8)
             };
             roiMappingRadio.CheckedChanged += MappingModeRadio_CheckedChanged;
@@ -998,8 +1005,10 @@ namespace ImageAnalysisTool.UI.Forms
                     {
                         originalImage?.Dispose();
                         originalImage = LoadImageFile(dialog.FileName);
+                        originalImageFileName = dialog.FileName;
 
                         originalPictureBox.Image = ConvertMatToBitmap(originalImage);
+                        UpdateImageLabels();
                         CheckCanAnalyze();
                     }
                     catch (Exception ex)
@@ -1021,8 +1030,10 @@ namespace ImageAnalysisTool.UI.Forms
                     {
                         enhancedImage?.Dispose();
                         enhancedImage = LoadImageFile(dialog.FileName);
+                        enhancedImageFileName = dialog.FileName;
 
                         enhancedPictureBox.Image = ConvertMatToBitmap(enhancedImage);
+                        UpdateImageLabels();
                         CheckCanAnalyze();
                     }
                     catch (Exception ex)
@@ -1044,8 +1055,10 @@ namespace ImageAnalysisTool.UI.Forms
                     {
                         enhanced2Image?.Dispose();
                         enhanced2Image = LoadImageFile(dialog.FileName);
+                        enhanced2ImageFileName = dialog.FileName;
 
                         enhanced2PictureBox.Image = ConvertMatToBitmap(enhanced2Image);
+                        UpdateImageLabels();
                         CheckCanAnalyze();
                     }
                     catch (Exception ex)
@@ -1058,29 +1071,90 @@ namespace ImageAnalysisTool.UI.Forms
 
         private void CheckCanAnalyze()
         {
-            // 需要原图和至少一个增强图
             bool hasOriginal = originalImage != null;
             bool hasEnhanced1 = enhancedImage != null;
             bool hasEnhanced2 = enhanced2Image != null;
 
-            // 检查尺寸匹配
+            logger.Debug($"图像加载状态检查: 原图={hasOriginal}, 增强图1={hasEnhanced1}, 增强图2={hasEnhanced2}");
+
+            // 记录图像尺寸信息
+            if (hasOriginal)
+                logger.Debug($"原图尺寸: {originalImage.Width}x{originalImage.Height}");
+            if (hasEnhanced1)
+                logger.Debug($"增强图1尺寸: {enhancedImage.Width}x{enhancedImage.Height}");
+            if (hasEnhanced2)
+                logger.Debug($"增强图2尺寸: {enhanced2Image.Width}x{enhanced2Image.Height}");
+
+            // 检查尺寸匹配（只在有多个图像时检查）
             bool sizesMatch = true;
             if (hasOriginal && hasEnhanced1)
             {
-                sizesMatch = sizesMatch && originalImage.Size() == enhancedImage.Size();
+                bool match = originalImage.Size() == enhancedImage.Size();
+                sizesMatch = sizesMatch && match;
+                logger.Debug($"原图与增强图1尺寸匹配: {match}");
             }
             if (hasOriginal && hasEnhanced2)
             {
-                sizesMatch = sizesMatch && originalImage.Size() == enhanced2Image.Size();
+                bool match = originalImage.Size() == enhanced2Image.Size();
+                sizesMatch = sizesMatch && match;
+                logger.Debug($"原图与增强图2尺寸匹配: {match}");
+            }
+            if (hasEnhanced1 && hasEnhanced2)
+            {
+                bool match = enhancedImage.Size() == enhanced2Image.Size();
+                sizesMatch = sizesMatch && match;
+                logger.Debug($"增强图1与增强图2尺寸匹配: {match}");
             }
 
-            // 启用分析按钮：有原图且至少有一个增强图，且尺寸匹配
-            analyzeBtn.Enabled = hasOriginal && (hasEnhanced1 || hasEnhanced2) && sizesMatch;
+            logger.Debug($"所有尺寸匹配结果: {sizesMatch}");
+
+            // 启用分析按钮：有任意图像就能启用（用于灰度直方图和基础分析）
+            bool canAnalyze = hasOriginal || hasEnhanced1 || hasEnhanced2;
+            analyzeBtn.Enabled = canAnalyze;
+            logger.Debug($"分析按钮启用: {canAnalyze}");
 
             // 启用对比按钮：有原图且有两个增强图，且尺寸匹配
-            compareBtn.Enabled = hasOriginal && hasEnhanced1 && hasEnhanced2 && sizesMatch;
+            bool canCompare = hasOriginal && hasEnhanced1 && hasEnhanced2 && sizesMatch;
+            compareBtn.Enabled = canCompare;
+            logger.Info($"对比分析按钮启用: {canCompare} (原图:{hasOriginal}, 增强图1:{hasEnhanced1}, 增强图2:{hasEnhanced2}, 尺寸匹配:{sizesMatch})");
 
             showROIButton.Enabled = hasOriginal;
+        }
+
+        /// <summary>
+        /// 更新图像标签显示，包含文件名
+        /// </summary>
+        private void UpdateImageLabels()
+        {
+            // 更新原图标签
+            if (!string.IsNullOrEmpty(originalImageFileName))
+            {
+                originalLabel.Text = $"原始图像 - {Path.GetFileName(originalImageFileName)}";
+            }
+            else
+            {
+                originalLabel.Text = "原始图像";
+            }
+
+            // 更新增强图1标签
+            if (!string.IsNullOrEmpty(enhancedImageFileName))
+            {
+                enhancedLabel.Text = $"增强图像1 - {Path.GetFileName(enhancedImageFileName)}";
+            }
+            else
+            {
+                enhancedLabel.Text = "增强图像1";
+            }
+
+            // 更新增强图2标签
+            if (!string.IsNullOrEmpty(enhanced2ImageFileName))
+            {
+                enhanced2Label.Text = $"增强图像2 - {Path.GetFileName(enhanced2ImageFileName)}";
+            }
+            else
+            {
+                enhanced2Label.Text = "增强图像2";
+            }
         }
 
         /// <summary>
@@ -1252,17 +1326,15 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 分析单个图像的ROI灰度值
+        /// 分析单个图像的灰度值（全图分析模式）
         /// </summary>
         private string AnalyzeImageGrayValues(Mat image, string imageName)
         {
             try
             {
                 StringBuilder result = new StringBuilder();
-                result.AppendLine($"=== {imageName} ROI灰度值分析 ===\n");
 
-                // 创建ROI掩码（使用通用OTSU方法）
-                Mat roiMask = CreateROIMaskForAnalysis(image);
+                result.AppendLine($"=== {imageName} 全图灰度值分析 ===\n");
 
                 // 基本信息
                 result.AppendLine($"图像尺寸: {image.Width} × {image.Height}");
@@ -1272,46 +1344,32 @@ namespace ImageAnalysisTool.UI.Forms
                 bool is16Bit = image.Type() == MatType.CV_16UC1;
                 int maxValue = is16Bit ? 65535 : 255;
                 result.AppendLine($"位深: {(is16Bit ? "16位" : "8位")} (0-{maxValue})");
+                result.AppendLine($"分析模式: 全图");
 
-                // ROI区域统计
-                int roiPixels = Cv2.CountNonZero(roiMask);
-                int totalPixels = image.Width * image.Height;
-                double roiRatio = (double)roiPixels / totalPixels * 100;
-                result.AppendLine($"ROI区域占比: {roiRatio:F1}%");
-                result.AppendLine($"ROI像素数量: {roiPixels:N0}");
+                // 全图灰度值统计
+                Scalar mean, stddev;
+                Cv2.MeanStdDev(image, out mean, out stddev);
 
-                // ROI区域灰度值统计
-                if (roiPixels > 0)
-                {
-                    Scalar mean, stddev;
-                    Cv2.MeanStdDev(image, out mean, out stddev, roiMask);
+                double minVal, maxVal;
+                OpenCvSharp.Point minLoc, maxLoc;
+                Cv2.MinMaxLoc(image, out minVal, out maxVal, out minLoc, out maxLoc);
 
-                    double minVal, maxVal;
-                    OpenCvSharp.Point minLoc, maxLoc;
-                    Cv2.MinMaxLoc(image, out minVal, out maxVal, out minLoc, out maxLoc, roiMask);
+                result.AppendLine($"\n全图灰度值统计:");
+                result.AppendLine($"  平均值: {mean.Val0:F1}");
+                result.AppendLine($"  标准差: {stddev.Val0:F1}");
+                result.AppendLine($"  最小值: {minVal:F0}");
+                result.AppendLine($"  最大值: {maxVal:F0}");
+                result.AppendLine($"  动态范围: {maxVal - minVal:F0}");
 
-                    result.AppendLine($"\nROI区域灰度值统计:");
-                    result.AppendLine($"  平均值: {mean.Val0:F1}");
-                    result.AppendLine($"  标准差: {stddev.Val0:F1}");
-                    result.AppendLine($"  最小值: {minVal:F0}");
-                    result.AppendLine($"  最大值: {maxVal:F0}");
-                    result.AppendLine($"  动态范围: {maxVal - minVal:F0}");
+                // 计算对比度
+                double contrast = stddev.Val0 / mean.Val0 * 100;
+                result.AppendLine($"  对比度系数: {contrast:F2}%");
 
-                    // 计算对比度
-                    double contrast = stddev.Val0 / mean.Val0 * 100;
-                    result.AppendLine($"  对比度系数: {contrast:F2}%");
-                }
-                else
-                {
-                    result.AppendLine("\n警告: 未检测到有效的ROI区域");
-                }
-
-                roiMask.Dispose();
                 return result.ToString();
             }
             catch (Exception ex)
             {
-                return $"{imageName} ROI灰度值分析失败: {ex.Message}";
+                return $"{imageName} 灰度值分析失败: {ex.Message}";
             }
         }
 
@@ -1706,17 +1764,41 @@ namespace ImageAnalysisTool.UI.Forms
                 bool is16Bit = sourceImage.Type() == MatType.CV_16UC1;
                 int maxValue = is16Bit ? 65535 : 255;
 
-                // 根据当前模式收集映射数据
+                // 根据当前模式收集映射数据（智能降级处理）
                 Dictionary<int, int> mappingData;
                 string modeText;
 
                 if (roiMappingRadio != null && roiMappingRadio.Checked)
                 {
-                    // ROI模式：只分析ROI区域
-                    Mat roiMask = CreateROIMaskForAnalysis(sourceImage);
-                    mappingData = CollectMappingDataForCurveROI(sourceImage, targetImage, roiMask, is16Bit);
-                    modeText = " (ROI分析)";
-                    roiMask.Dispose();
+                    // ROI模式：尝试分析ROI区域，失败时自动降级到全图
+                    try
+                    {
+                        Mat roiMask = CreateROIMaskForAnalysis(sourceImage);
+                        int roiPixels = Cv2.CountNonZero(roiMask);
+                        int totalPixels = sourceImage.Width * sourceImage.Height;
+
+                        // 检查ROI是否有效
+                        if (roiPixels > 0 && roiPixels < totalPixels * 0.95)
+                        {
+                            // ROI有效，使用ROI分析
+                            mappingData = CollectMappingDataForCurveROI(sourceImage, targetImage, roiMask, is16Bit);
+                            modeText = " (ROI分析)";
+                        }
+                        else
+                        {
+                            // ROI无效，降级到全图分析
+                            mappingData = CollectMappingDataForCurve(sourceImage, targetImage, is16Bit);
+                            modeText = roiPixels == 0 ? " (ROI检测失败，使用全图分析)" : " (ROI过大，使用全图分析)";
+                        }
+                        roiMask.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        // ROI处理异常，降级到全图分析
+                        Console.WriteLine($"ROI分析异常，降级到全图分析: {ex.Message}");
+                        mappingData = CollectMappingDataForCurve(sourceImage, targetImage, is16Bit);
+                        modeText = " (ROI分析异常，使用全图分析)";
+                    }
                 }
                 else
                 {
@@ -1807,9 +1889,9 @@ namespace ImageAnalysisTool.UI.Forms
                     Alignment = StringAlignment.Center
                 });
 
-                // 设置标题
+                // 设置标题（包含分析模式信息）
                 chart.Titles.Clear();
-                chart.Titles.Add(title);
+                chart.Titles.Add(title + modeText);
 
                 // 强制刷新图表
                 chart.Invalidate();
