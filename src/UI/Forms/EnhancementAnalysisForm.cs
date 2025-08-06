@@ -83,6 +83,7 @@ namespace ImageAnalysisTool.UI.Forms
         private Button compareBtn;
         private Button showROIButton;
         private Button exportReportBtn;
+        private Button imageProcessingBtn;  // 新增：图像处理按钮
         private ComboBox roiModeComboBox;
         private Label roiModeLabel;
 
@@ -668,6 +669,17 @@ namespace ImageAnalysisTool.UI.Forms
             };
             exportReportBtn.Click += ExportReportBtn_Click;
 
+            // 新增：图像处理按钮
+            imageProcessingBtn = new Button
+            {
+                Text = "图像处理",
+                Size = new System.Drawing.Size(100, 35),
+                Margin = new Padding(5),
+                BackColor = Color.LightPink,
+                Enabled = false  // 需要加载图像后才能启用
+            };
+            imageProcessingBtn.Click += ImageProcessingBtn_Click;
+
             // 创建ROI模式选择控件
             roiModeLabel = new Label
             {
@@ -693,7 +705,7 @@ namespace ImageAnalysisTool.UI.Forms
 
             // 添加按钮到布局
             buttonLayout.Controls.AddRange(new Control[] {
-                loadOriginalBtn, loadEnhancedBtn, loadEnhanced2Btn, analyzeBtn, compareBtn, showROIButton, exportReportBtn,
+                loadOriginalBtn, loadEnhancedBtn, loadEnhanced2Btn, analyzeBtn, compareBtn, showROIButton, exportReportBtn, imageProcessingBtn,
                 roiModeLabel, roiModeComboBox, mappingModePanel
             });
 
@@ -1119,6 +1131,10 @@ namespace ImageAnalysisTool.UI.Forms
             logger.Info($"对比分析按钮启用: {canCompare} (原图:{hasOriginal}, 增强图1:{hasEnhanced1}, 增强图2:{hasEnhanced2}, 尺寸匹配:{sizesMatch})");
 
             showROIButton.Enabled = hasOriginal;
+
+            // 启用图像处理按钮：至少需要原图和一个增强图
+            bool canProcessImage = hasOriginal && (hasEnhanced1 || hasEnhanced2);
+            imageProcessingBtn.Enabled = canProcessImage;
         }
 
         /// <summary>
@@ -4337,6 +4353,36 @@ namespace ImageAnalysisTool.UI.Forms
             sb.AppendLine("=".PadRight(80, '='));
 
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 图像处理按钮点击事件 - 打开图像处理窗口
+        /// </summary>
+        private void ImageProcessingBtn_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // 检查是否有足够的图像数据
+                if (originalImage == null)
+                {
+                    MessageBox.Show("请先加载原图", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                if (enhancedImage == null && enhanced2Image == null)
+                {
+                    MessageBox.Show("请至少加载一个增强图", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                // 创建并显示图像处理窗口
+                var processingForm = new ImageProcessingForm(originalImage, enhancedImage, enhanced2Image);
+                processingForm.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开图像处理窗口失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }
