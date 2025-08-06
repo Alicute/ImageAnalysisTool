@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(dotnet build:ImageAnalysisTool.csproj)",
-      "Bash(dotnet clean:*)"
+      "Bash(dotnet clean:*)",
+      "Bash(mkdir:*)",
+      "Bash(dotnet run:*)"
     ],
     "deny": []
   }

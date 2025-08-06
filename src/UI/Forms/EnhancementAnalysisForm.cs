@@ -1212,32 +1212,66 @@ namespace ImageAnalysisTool.UI.Forms
         {
             try
             {
+                Console.WriteLine($"[CompareBtn_Click] 开始对比分析 - UI线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
                 this.Cursor = Cursors.WaitCursor;
                 compareBtn.Text = "对比中...";
                 compareBtn.Enabled = false;
 
                 // 异步执行4种对比分析
-                await Task.Run(() => PerformComprehensiveComparison());
+                Console.WriteLine($"[CompareBtn_Click] 开始后台任务...");
+                await Task.Run(() => {
+                    Console.WriteLine($"[Task.Run] 后台任务线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                    PerformComprehensiveComparison();
+                    Console.WriteLine($"[Task.Run] 后台任务完成");
+                });
 
-                // 显示对比分析结果（像素映射、对比报告）
-                DisplayComparisonAnalysisResults();
+                // 确保在UI线程中更新UI
+                Console.WriteLine($"[CompareBtn_Click] 后台任务完成，开始UI更新...");
+                this.Invoke((MethodInvoker)delegate {
+                    try
+                    {
+                        Console.WriteLine($"[Invoke] UI更新线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                        
+                        // 显示对比分析结果（像素映射、对比报告）
+                        Console.WriteLine($"[Invoke] 调用 DisplayComparisonAnalysisResults...");
+                        DisplayComparisonAnalysisResults();
 
-                // 生成AI分析总结
-                GenerateAISummary();
+                        // 生成AI分析总结
+                        Console.WriteLine($"[Invoke] 调用 GenerateAISummary...");
+                        GenerateAISummary();
 
-                compareBtn.Text = "重新对比";
-                compareBtn.Enabled = true;
-                exportReportBtn.Enabled = true;
+                        compareBtn.Text = "重新对比";
+                        compareBtn.Enabled = true;
+                        exportReportBtn.Enabled = true;
+                        Console.WriteLine($"[Invoke] UI更新完成");
+                    }
+                    catch (Exception uiEx)
+                    {
+                        Console.WriteLine($"[Invoke] UI更新异常: {uiEx.GetType().Name} - {uiEx.Message}");
+                        Console.WriteLine($"[Invoke] 堆栈跟踪: {uiEx.StackTrace}");
+                        MessageBox.Show($"UI更新失败: {uiEx.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        compareBtn.Text = "对比分析";
+                        compareBtn.Enabled = true;
+                    }
+                });
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"对比分析失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                compareBtn.Text = "对比分析";
-                compareBtn.Enabled = true;
+                Console.WriteLine($"[CompareBtn_Click] 主异常: {ex.GetType().Name} - {ex.Message}");
+                Console.WriteLine($"[CompareBtn_Click] 堆栈跟踪: {ex.StackTrace}");
+                
+                // 确保在UI线程中显示错误消息
+                this.Invoke((MethodInvoker)delegate {
+                    MessageBox.Show($"对比分析失败: {ex.Message}\n\n异常类型: {ex.GetType().Name}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    compareBtn.Text = "对比分析";
+                    compareBtn.Enabled = true;
+                });
             }
             finally
             {
-                this.Cursor = Cursors.Default;
+                this.Invoke((MethodInvoker)delegate {
+                    this.Cursor = Cursors.Default;
+                });
             }
         }
 
@@ -1329,16 +1363,39 @@ namespace ImageAnalysisTool.UI.Forms
         /// </summary>
         private void DisplayComparisonAnalysisResults()
         {
-            // 显示像素映射
-            if (originalImage != null)
-                DisplayPixelMappingForImages(originalImage, originalImage, originalPixelMappingChart, "原图 vs 原图");
-            if (originalImage != null && enhancedImage != null)
-                DisplayPixelMappingForImages(originalImage, enhancedImage, enhanced1PixelMappingChart, "原图 vs 增强图1");
-            if (originalImage != null && enhanced2Image != null)
-                DisplayPixelMappingForImages(originalImage, enhanced2Image, enhanced2PixelMappingChart, "原图 vs 增强图2");
+            try
+            {
+                Console.WriteLine($"[DisplayComparisonAnalysisResults] 开始 - 线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                
+                // 显示像素映射
+                if (originalImage != null)
+                {
+                    Console.WriteLine($"[DisplayComparisonAnalysisResults] 显示原图像素映射...");
+                    DisplayPixelMappingForImages(originalImage, originalImage, originalPixelMappingChart, "原图 vs 原图");
+                }
+                if (originalImage != null && enhancedImage != null)
+                {
+                    Console.WriteLine($"[DisplayComparisonAnalysisResults] 显示增强图1像素映射...");
+                    DisplayPixelMappingForImages(originalImage, enhancedImage, enhanced1PixelMappingChart, "原图 vs 增强图1");
+                }
+                if (originalImage != null && enhanced2Image != null)
+                {
+                    Console.WriteLine($"[DisplayComparisonAnalysisResults] 显示增强图2像素映射...");
+                    DisplayPixelMappingForImages(originalImage, enhanced2Image, enhanced2PixelMappingChart, "原图 vs 增强图2");
+                }
 
-            // 显示对比分析报告
-            DisplayComparisonReports();
+                // 显示对比分析报告
+                Console.WriteLine($"[DisplayComparisonAnalysisResults] 调用 DisplayComparisonReports...");
+                DisplayComparisonReports();
+                
+                Console.WriteLine($"[DisplayComparisonAnalysisResults] 完成");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DisplayComparisonAnalysisResults] 异常: {ex.GetType().Name} - {ex.Message}");
+                Console.WriteLine($"[DisplayComparisonAnalysisResults] 堆栈跟踪: {ex.StackTrace}");
+                throw;
+            }
         }
 
         /// <summary>
@@ -1463,15 +1520,30 @@ namespace ImageAnalysisTool.UI.Forms
         /// </summary>
         private void DisplayComparisonReports()
         {
-            // 显示原图对比报告（保持基础信息）
-            if (originalImage != null)
+            try
             {
-                originalAnalysisTextBox.Text = GenerateBasicImageReport(originalImage, "原图");
-            }
+                Console.WriteLine($"[DisplayComparisonReports] 开始 - 线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                
+                // 显示原图对比报告（保持基础信息）
+                if (originalImage != null)
+                {
+                    Console.WriteLine($"[DisplayComparisonReports] 更新原图分析文本框...");
+                    if (originalAnalysisTextBox != null && originalAnalysisTextBox.InvokeRequired)
+                    {
+                        originalAnalysisTextBox.Invoke((MethodInvoker)delegate {
+                            originalAnalysisTextBox.Text = GenerateBasicImageReport(originalImage, "原图");
+                        });
+                    }
+                    else if (originalAnalysisTextBox != null)
+                    {
+                        originalAnalysisTextBox.Text = GenerateBasicImageReport(originalImage, "原图");
+                    }
+                }
 
             // 显示增强图1对比报告
             if (enhancedImage != null && originalVsEnhanced1Result.HasValue)
             {
+                Console.WriteLine($"[DisplayComparisonReports] 更新增强图1分析文本框...");
                 string enhanced1Report = GenerateComparisonReport(originalVsEnhanced1Result.Value, "增强图1", "原图");
 
                 // 添加增强图1 vs 增强图2的对比结果
@@ -1480,12 +1552,22 @@ namespace ImageAnalysisTool.UI.Forms
                     enhanced1Report += "\n" + GenerateEnhancedComparisonSection(enhanced1VsEnhanced2Result.Value, "增强图1", "增强图2");
                 }
 
-                enhanced1AnalysisTextBox.Text = enhanced1Report;
+                if (enhanced1AnalysisTextBox != null && enhanced1AnalysisTextBox.InvokeRequired)
+                {
+                    enhanced1AnalysisTextBox.Invoke((MethodInvoker)delegate {
+                        enhanced1AnalysisTextBox.Text = enhanced1Report;
+                    });
+                }
+                else if (enhanced1AnalysisTextBox != null)
+                {
+                    enhanced1AnalysisTextBox.Text = enhanced1Report;
+                }
             }
 
             // 显示增强图2对比报告
             if (enhanced2Image != null && originalVsEnhanced2Result.HasValue)
             {
+                Console.WriteLine($"[DisplayComparisonReports] 更新增强图2分析文本框...");
                 string enhanced2Report = GenerateComparisonReport(originalVsEnhanced2Result.Value, "增强图2", "原图");
 
                 // 添加增强图1 vs 增强图2的对比结果（相同内容）
@@ -1494,7 +1576,25 @@ namespace ImageAnalysisTool.UI.Forms
                     enhanced2Report += "\n" + GenerateEnhancedComparisonSection(enhanced1VsEnhanced2Result.Value, "增强图2", "增强图1");
                 }
 
-                enhanced2AnalysisTextBox.Text = enhanced2Report;
+                if (enhanced2AnalysisTextBox != null && enhanced2AnalysisTextBox.InvokeRequired)
+                {
+                    enhanced2AnalysisTextBox.Invoke((MethodInvoker)delegate {
+                        enhanced2AnalysisTextBox.Text = enhanced2Report;
+                    });
+                }
+                else if (enhanced2AnalysisTextBox != null)
+                {
+                    enhanced2AnalysisTextBox.Text = enhanced2Report;
+                }
+            }
+            
+            Console.WriteLine($"[DisplayComparisonReports] 完成");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DisplayComparisonReports] 异常: {ex.GetType().Name} - {ex.Message}");
+                Console.WriteLine($"[DisplayComparisonReports] 堆栈跟踪: {ex.StackTrace}");
+                throw;
             }
         }
 
@@ -3875,32 +3975,136 @@ namespace ImageAnalysisTool.UI.Forms
         {
             try
             {
+                Console.WriteLine($"[GenerateAISummary] 开始 - 线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                
                 // 第1列：综合对比分析
+                Console.WriteLine($"[GenerateAISummary] 生成综合对比分析...");
                 var comprehensiveSummary = GenerateComprehensiveAnalysisSummary();
 
                 // 第2列：增强算法1专项分析
+                Console.WriteLine($"[GenerateAISummary] 生成增强算法1专项分析...");
                 var algorithm1Analysis = GenerateAlgorithmSpecificAnalysis(originalImage, enhancedImage, "增强算法1", enhanced1AnalysisResult);
 
                 // 第3列：增强算法2专项分析
+                Console.WriteLine($"[GenerateAISummary] 生成增强算法2专项分析...");
                 var algorithm2Analysis = GenerateAlgorithmSpecificAnalysis(originalImage, enhanced2Image, "增强算法2", enhanced2AnalysisResult);
 
-                // 分别显示不同内容
+                // 分别显示不同内容 - 检查控件是否存在且需要调用
+                Console.WriteLine($"[GenerateAISummary] 更新文本框内容...");
+                
                 if (originalAISummaryTextBox != null)
-                    originalAISummaryTextBox.Text = comprehensiveSummary;
+                {
+                    Console.WriteLine($"[GenerateAISummary] originalAISummaryTextBox.InvokeRequired: {originalAISummaryTextBox.InvokeRequired}");
+                    if (originalAISummaryTextBox.InvokeRequired)
+                    {
+                        originalAISummaryTextBox.Invoke((MethodInvoker)delegate {
+                            Console.WriteLine($"[Invoke] 更新originalAISummaryTextBox - 线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                            originalAISummaryTextBox.Text = comprehensiveSummary;
+                        });
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[GenerateAISummary] 直接更新originalAISummaryTextBox");
+                        originalAISummaryTextBox.Text = comprehensiveSummary;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[GenerateAISummary] originalAISummaryTextBox 为 null");
+                }
+
                 if (enhanced1AISummaryTextBox != null)
-                    enhanced1AISummaryTextBox.Text = algorithm1Analysis;
+                {
+                    Console.WriteLine($"[GenerateAISummary] enhanced1AISummaryTextBox.InvokeRequired: {enhanced1AISummaryTextBox.InvokeRequired}");
+                    if (enhanced1AISummaryTextBox.InvokeRequired)
+                    {
+                        enhanced1AISummaryTextBox.Invoke((MethodInvoker)delegate {
+                            Console.WriteLine($"[Invoke] 更新enhanced1AISummaryTextBox - 线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                            enhanced1AISummaryTextBox.Text = algorithm1Analysis;
+                        });
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[GenerateAISummary] 直接更新enhanced1AISummaryTextBox");
+                        enhanced1AISummaryTextBox.Text = algorithm1Analysis;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[GenerateAISummary] enhanced1AISummaryTextBox 为 null");
+                }
+
                 if (enhanced2AISummaryTextBox != null)
-                    enhanced2AISummaryTextBox.Text = algorithm2Analysis;
+                {
+                    Console.WriteLine($"[GenerateAISummary] enhanced2AISummaryTextBox.InvokeRequired: {enhanced2AISummaryTextBox.InvokeRequired}");
+                    if (enhanced2AISummaryTextBox.InvokeRequired)
+                    {
+                        enhanced2AISummaryTextBox.Invoke((MethodInvoker)delegate {
+                            Console.WriteLine($"[Invoke] 更新enhanced2AISummaryTextBox - 线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                            enhanced2AISummaryTextBox.Text = algorithm2Analysis;
+                        });
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[GenerateAISummary] 直接更新enhanced2AISummaryTextBox");
+                        enhanced2AISummaryTextBox.Text = algorithm2Analysis;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[GenerateAISummary] enhanced2AISummaryTextBox 为 null");
+                }
+                
+                Console.WriteLine($"[GenerateAISummary] 完成");
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[GenerateAISummary] 异常: {ex.GetType().Name} - {ex.Message}");
+                Console.WriteLine($"[GenerateAISummary] 堆栈跟踪: {ex.StackTrace}");
+                
                 var errorMsg = $"AI总结生成失败: {ex.Message}";
-                if (originalAISummaryTextBox != null)
-                    originalAISummaryTextBox.Text = errorMsg;
-                if (enhanced1AISummaryTextBox != null)
-                    enhanced1AISummaryTextBox.Text = errorMsg;
-                if (enhanced2AISummaryTextBox != null)
-                    enhanced2AISummaryTextBox.Text = errorMsg;
+                
+                // 安全地更新错误消息
+                try
+                {
+                    if (originalAISummaryTextBox != null && originalAISummaryTextBox.InvokeRequired)
+                    {
+                        originalAISummaryTextBox.Invoke((MethodInvoker)delegate {
+                            originalAISummaryTextBox.Text = errorMsg;
+                        });
+                    }
+                    else if (originalAISummaryTextBox != null)
+                    {
+                        originalAISummaryTextBox.Text = errorMsg;
+                    }
+
+                    if (enhanced1AISummaryTextBox != null && enhanced1AISummaryTextBox.InvokeRequired)
+                    {
+                        enhanced1AISummaryTextBox.Invoke((MethodInvoker)delegate {
+                            enhanced1AISummaryTextBox.Text = errorMsg;
+                        });
+                    }
+                    else if (enhanced1AISummaryTextBox != null)
+                    {
+                        enhanced1AISummaryTextBox.Text = errorMsg;
+                    }
+
+                    if (enhanced2AISummaryTextBox != null && enhanced2AISummaryTextBox.InvokeRequired)
+                    {
+                        enhanced2AISummaryTextBox.Invoke((MethodInvoker)delegate {
+                            enhanced2AISummaryTextBox.Text = errorMsg;
+                        });
+                    }
+                    else if (enhanced2AISummaryTextBox != null)
+                    {
+                        enhanced2AISummaryTextBox.Text = errorMsg;
+                    }
+                }
+                catch
+                {
+                    // 如果连错误消息都无法显示，至少记录到控制台
+                    Console.WriteLine($"AI总结生成失败: {ex.Message}");
+                }
             }
         }
 
