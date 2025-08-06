@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using OpenCvSharp;
 using ImageAnalysisTool.Core.Processors;
+using ImageAnalysisTool.UI.Controls;
+using ImageAnalysisTool.UI.Helpers;
 using NLog;
 
 namespace ImageAnalysisTool.UI.Forms
@@ -25,7 +29,9 @@ namespace ImageAnalysisTool.UI.Forms
 
         // 处理器和历史
         private PixelProcessor processor;
+        private AsyncImageProcessor asyncProcessor;
         private ProcessingHistory history;
+        private SimpleProgressBar progressBar;
 
         // UI控件 - 图像显示区域
         private PictureBox originalPictureBox;
@@ -60,6 +66,7 @@ namespace ImageAnalysisTool.UI.Forms
 
         private Button startPixelProcessingBtn;
         private Button batchApplyBtn;
+        private Button exportCompleteDataBtn;
 
         // UI控件 - 历史记录
         private ListBox historyListBox;
@@ -112,8 +119,14 @@ namespace ImageAnalysisTool.UI.Forms
 
             // 初始化处理器
             processor = new PixelProcessor();
+            asyncProcessor = new AsyncImageProcessor();
             history = new ProcessingHistory();
             history.HistoryChanged += History_HistoryChanged;
+            
+            // 订阅异步处理器事件
+            asyncProcessor.ProgressChanged += OnProgressChanged;
+            asyncProcessor.ProcessingCompleted += OnProcessingCompleted;
+            asyncProcessor.ProcessingError += OnProcessingError;
 
             // 初始化UI
             InitializeComponent();
@@ -121,6 +134,9 @@ namespace ImageAnalysisTool.UI.Forms
             InitializeProcessingControls();
             InitializeHistoryControls();
             InitializeToolbar();
+
+            // 启用导出完整数据按钮
+            exportCompleteDataBtn.Enabled = true;
 
             logger.Info($"图像处理窗口初始化完成 - 原图: {originalImage.Size()}, 目标图: {targetImage.Size()}");
         }
@@ -649,7 +665,7 @@ namespace ImageAnalysisTool.UI.Forms
                 operationLabel, operationComboBox, valueLabel, valueNumeric, applyMathBtn
             });
 
-            // 4. 操作按钮
+            // 4. 操作按钮和进度条
             var buttonPanel = new Panel { Dock = DockStyle.Fill };
 
             startPixelProcessingBtn = new Button
@@ -671,8 +687,25 @@ namespace ImageAnalysisTool.UI.Forms
             };
             batchApplyBtn.Click += BatchApplyBtn_Click;
 
+            exportCompleteDataBtn = new Button
+            {
+                Text = "导出完整数据",
+                Location = new System.Drawing.Point(300, 10),
+                Size = new System.Drawing.Size(120, 35),
+                BackColor = Color.LightBlue,
+                Enabled = false
+            };
+            exportCompleteDataBtn.Click += ExportCompleteDataBtn_Click;
+            
+            // 添加进度条
+            progressBar = new SimpleProgressBar
+            {
+                Location = new System.Drawing.Point(10, 55),
+                Visible = false
+            };
+
             buttonPanel.Controls.AddRange(new Control[] {
-                startPixelProcessingBtn, batchApplyBtn
+                startPixelProcessingBtn, batchApplyBtn, exportCompleteDataBtn, progressBar
             });
 
             // 添加到布局
@@ -728,6 +761,7 @@ namespace ImageAnalysisTool.UI.Forms
                 Font = new Font("Consolas", 8),
                 SelectionMode = SelectionMode.One
             };
+            historyListBox.DoubleClick += HistoryListBox_DoubleClick;
 
             // 历史记录按钮
             var historyButtonPanel = new Panel { Dock = DockStyle.Fill };
@@ -903,9 +937,70 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
+        /// 导出完整数据按钮点击事件
+        /// </summary>
+        private async void ExportCompleteDataBtn_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (originalImage == null || targetImage == null)
+                {
+                    MessageBox.Show("请先加载原图和目标图", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var result = MessageBox.Show(
+                    "导出完整数据将生成包含750万行像素详细信息的文件，\n" +
+                    "文件大小约400-500MB，可能需要30-60秒时间。\n\n" +
+                    "是否继续导出？",
+                    "确认导出完整数据",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (result == DialogResult.Yes)
+                {
+                    // 显示进度
+                    exportCompleteDataBtn.Enabled = false;
+                    statusLabel.Text = "正在导出完整750万行数据...";
+                    statusLabel.Refresh();
+
+                    // 选择导出格式
+                    var formatResult = MessageBox.Show(
+                        "请选择导出格式：\n\n" +
+                        "是(Y) - TXT格式（适合AI阅读）\n" +
+                        "否(N) - CSV格式（适合数据分析）",
+                        "选择导出格式",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question);
+
+                    string format = formatResult == DialogResult.Yes ? "txt" : "csv";
+
+                    // 异步导出
+                    string dataFile = await asyncProcessor.ExportCompletePixelDataAsync(originalImage, targetImage, format);
+
+                    // 恢复UI
+                    exportCompleteDataBtn.Enabled = true;
+                    statusLabel.Text = "完整数据导出完成";
+                    UpdateImageDisplays();
+
+                    logger.Info($"完整数据导出完成: {dataFile}");
+                    MessageBox.Show($"完整数据导出成功！\n\n文件位置: {dataFile}\n文件大小: {new FileInfo(dataFile).Length / 1024 / 1024:F1}MB", 
+                        "导出成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                exportCompleteDataBtn.Enabled = true;
+                statusLabel.Text = "导出失败";
+                logger.Error(ex, "导出完整数据失败");
+                MessageBox.Show($"导出完整数据失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
         /// 开始逐像素处理按钮点击事件
         /// </summary>
-        private void StartPixelProcessingBtn_Click(object sender, EventArgs e)
+        private async void StartPixelProcessingBtn_Click(object sender, EventArgs e)
         {
             try
             {
@@ -914,38 +1009,38 @@ namespace ImageAnalysisTool.UI.Forms
                     // 直接映射模式
                     var result = MessageBox.Show(
                         "直接映射将分析原图和目标图的像素对应关系，并应用到处理结果。\n\n" +
-                        "这个过程可能需要一些时间，是否继续？",
+                        "这个过程将进行逐像素处理，可能需要15-20秒时间，是否继续？",
                         "确认直接映射",
                         MessageBoxButtons.YesNo,
                         MessageBoxIcon.Question);
 
                     if (result == DialogResult.Yes)
                     {
-                        this.Cursor = Cursors.WaitCursor;
+                        // 显示进度条
+                        progressBar.Reset();
+                        progressBar.Visible = true;
+                        startPixelProcessingBtn.Enabled = false;
                         statusLabel.Text = "正在分析像素映射关系...";
                         statusLabel.Refresh();
 
-                        // 执行直接映射
-                        var newProcessedImage = processor.DirectMapping(originalImage, targetImage, 0.1);
+                        // 使用异步处理器进行直接映射
+                        var newProcessedImage = await asyncProcessor.DirectMappingAsync(originalImage, targetImage);
 
                         // 更新处理结果
                         processedImage.Dispose();
                         processedImage = newProcessedImage;
 
-                        // 创建并记录处理规则到历史
-                        var pixels = processor.GetPixelTriples(originalImage, null, targetImage, 0.1);
-                        var mapping = processor.AnalyzePixelMapping(pixels);
-                        var rule = ProcessingRule.CreateDirectMapping("直接映射", mapping);
-                        history.AddStep(rule);
-
                         // 更新显示
                         UpdateImageDisplays();
 
-                        this.Cursor = Cursors.Default;
-                        statusLabel.Text = "直接映射处理完成 - 可查看处理结果";
+                        // 隐藏进度条
+                        progressBar.Visible = false;
+                        startPixelProcessingBtn.Enabled = true;
+                        exportCompleteDataBtn.Enabled = true;
+                        statusLabel.Text = "直接映射处理完成 - 可查看处理结果或导出完整数据";
 
                         logger.Info("直接映射处理完成");
-                        MessageBox.Show("直接映射处理完成！请查看右下角的处理结果图像。", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        MessageBox.Show("直接映射处理完成！报告已自动导出到桌面。", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                 }
                 else
@@ -968,7 +1063,8 @@ namespace ImageAnalysisTool.UI.Forms
             }
             catch (Exception ex)
             {
-                this.Cursor = Cursors.Default;
+                progressBar.Visible = false;
+                startPixelProcessingBtn.Enabled = true;
                 logger.Error(ex, "开始像素处理失败");
                 MessageBox.Show($"开始像素处理失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -1100,6 +1196,34 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
+        /// 历史记录列表双击事件 - 打开对应的报告文件
+        /// </summary>
+        private void HistoryListBox_DoubleClick(object sender, EventArgs e)
+        {
+            try
+            {
+                if (historyListBox.SelectedIndex >= 0)
+                {
+                    var selectedItem = historyListBox.SelectedItem;
+                    if (selectedItem != null)
+                    {
+                        // 尝试从项目文本中提取时间戳
+                        string itemText = selectedItem.ToString();
+                        
+                        // 格式通常是: "12:34:56 直接映射"
+                        // 我们需要提取完整的时间戳来匹配文件名
+                        LogFileHelper.OpenLatestLogFile();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "双击历史记录打开文件失败");
+                MessageBox.Show($"打开报告文件失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
         /// 保存结果按钮点击事件
         /// </summary>
         private void SaveBtn_Click(object sender, EventArgs e)
@@ -1128,39 +1252,19 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 导出规律按钮点击事件
+        /// 导出规律按钮点击事件 - 现在改为打开最新的日志文件
         /// </summary>
         private void ExportRulesBtn_Click(object sender, EventArgs e)
         {
             try
             {
-                var historyList = history.GetHistory();
-                if (historyList.Count == 0)
-                {
-                    MessageBox.Show("没有处理规律可导出", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
-
-                using (var dialog = new SaveFileDialog())
-                {
-                    dialog.Filter = "文本文件|*.txt|所有文件|*.*";
-                    dialog.DefaultExt = "txt";
-                    dialog.FileName = $"处理规律_{DateTime.Now:yyyyMMdd_HHmmss}";
-
-                    if (dialog.ShowDialog() == DialogResult.OK)
-                    {
-                        var report = processor.GenerateProcessingReport(historyList);
-                        System.IO.File.WriteAllText(dialog.FileName, report, System.Text.Encoding.UTF8);
-
-                        logger.Info($"导出处理规律: {dialog.FileName}");
-                        MessageBox.Show("处理规律导出成功！", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                }
+                // 使用LogFileHelper打开最新的日志文件
+                LogFileHelper.OpenLatestLogFile();
             }
             catch (Exception ex)
             {
-                logger.Error(ex, "导出处理规律失败");
-                MessageBox.Show($"导出处理规律失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                logger.Error(ex, "打开日志文件失败");
+                MessageBox.Show($"打开日志文件失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -1254,6 +1358,104 @@ namespace ImageAnalysisTool.UI.Forms
             {
                 logger.Error(ex, "重建处理图像失败");
                 throw;
+            }
+        }
+
+        #endregion
+
+        #region 异步处理事件处理方法
+
+        /// <summary>
+        /// 进度更新事件处理
+        /// </summary>
+        private void OnProgressChanged(object sender, ProgressEventArgs e)
+        {
+            if (progressBar.InvokeRequired)
+            {
+                progressBar.Invoke(new Action(() => 
+                {
+                    progressBar.SetProgress(e.Processed, e.Total, e.Status);
+                }));
+            }
+            else
+            {
+                progressBar.SetProgress(e.Processed, e.Total, e.Status);
+            }
+        }
+
+        /// <summary>
+        /// 处理完成事件处理
+        /// </summary>
+        private void OnProcessingCompleted(object sender, ProcessingCompleteEventArgs e)
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(() => 
+                {
+                    // 显示处理结果图像
+                    if (e.ResultImage != null && !e.ResultImage.Empty())
+                    {
+                        processedImage = e.ResultImage.Clone();
+                        resultPictureBox.Image = ConvertMatToBitmap(processedImage);
+                        resultPictureBox.Refresh();
+                        
+                        // 更新图像显示
+                        UpdateImageDisplays();
+                        
+                        statusLabel.Text = "处理完成！报告已自动导出到桌面。";
+                        logger.Info("异步处理完成，处理结果图像已更新");
+                        
+                        // 注意：这里可以添加切换到结果Tab的逻辑
+                    }
+                    else
+                    {
+                        statusLabel.Text = "处理完成！但无法显示结果图像。";
+                        logger.Warn("异步处理完成，但结果图像为空");
+                    }
+                }));
+            }
+            else
+            {
+                // 显示处理结果图像
+                if (e.ResultImage != null && !e.ResultImage.Empty())
+                {
+                    processedImage = e.ResultImage.Clone();
+                    resultPictureBox.Image = ConvertMatToBitmap(processedImage);
+                    resultPictureBox.Refresh();
+                    
+                    // 更新图像显示
+                    UpdateImageDisplays();
+                    
+                    statusLabel.Text = "处理完成！报告已自动导出到桌面。";
+                    logger.Info("异步处理完成，处理结果图像已更新");
+                    
+                    // 注意：这里可以添加切换到结果Tab的逻辑
+                }
+                else
+                {
+                    statusLabel.Text = "处理完成！但无法显示结果图像。";
+                    logger.Warn("异步处理完成，但结果图像为空");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 处理错误事件处理
+        /// </summary>
+        private void OnProcessingError(object sender, ProcessingErrorEventArgs e)
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(() => 
+                {
+                    MessageBox.Show($"处理失败: {e.Error.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    logger.Error(e.Error, "异步处理失败");
+                }));
+            }
+            else
+            {
+                MessageBox.Show($"处理失败: {e.Error.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                logger.Error(e.Error, "异步处理失败");
             }
         }
 

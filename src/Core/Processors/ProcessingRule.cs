@@ -100,6 +100,11 @@ namespace ImageAnalysisTool.Core.Processors
         public ProcessingStatistics Statistics { get; set; }
 
         /// <summary>
+        /// 像素详细信息列表 (可选，用于详细报告)
+        /// </summary>
+        public List<PixelMappingDetail> PixelDetails { get; set; }
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         public ProcessingRule()
@@ -108,6 +113,7 @@ namespace ImageAnalysisTool.Core.Processors
             Parameters = new Dictionary<string, object>();
             CreateTime = DateTime.Now;
             Statistics = new ProcessingStatistics();
+            PixelDetails = new List<PixelMappingDetail>();
         }
 
         /// <summary>
@@ -124,14 +130,30 @@ namespace ImageAnalysisTool.Core.Processors
 
             rule.Parameters["Mapping"] = mapping;
             
-            // 创建变换函数
+            // 创建变换函数 - 优化处理16位图像的分组映射
             rule.Transform = (originalValue) =>
             {
-                if (mapping.ContainsKey(originalValue))
-                    return (ushort)mapping[originalValue];
+                int searchKey = originalValue;
+                
+                // 对于16位图像，尝试找到对应的分组
+                if (!mapping.ContainsKey(searchKey))
+                {
+                    // 检查是否是16位图像的分组映射（分组大小通常是64）
+                    int binSize = 64;
+                    int binnedKey = (searchKey / binSize) * binSize;
+                    
+                    if (mapping.ContainsKey(binnedKey))
+                    {
+                        return (ushort)mapping[binnedKey];
+                    }
+                }
+                
+                // 如果有直接映射，使用直接映射
+                if (mapping.ContainsKey(searchKey))
+                    return (ushort)mapping[searchKey];
                 
                 // 如果没有直接映射，使用最近邻插值
-                var nearestKey = FindNearestKey(mapping, originalValue);
+                var nearestKey = FindNearestKey(mapping, searchKey);
                 return (ushort)mapping[nearestKey];
             };
 
@@ -153,38 +175,58 @@ namespace ImageAnalysisTool.Core.Processors
             rule.Parameters["Operation"] = operation;
             rule.Parameters["Value"] = value;
 
-            // 创建变换函数
+            // 创建变换函数 - 添加溢出保护
             rule.Transform = (originalValue) =>
             {
-                double result = originalValue;
-                
-                switch (operation)
+                try
                 {
-                    case MathOperationType.Add:
-                        result = originalValue + value;
-                        break;
-                    case MathOperationType.Subtract:
-                        result = originalValue - value;
-                        break;
-                    case MathOperationType.Multiply:
-                        result = originalValue * value;
-                        break;
-                    case MathOperationType.Divide:
-                        result = originalValue / value;
-                        break;
-                    case MathOperationType.Power:
-                        result = Math.Pow(originalValue, value);
-                        break;
-                    case MathOperationType.Log:
-                        result = Math.Log(originalValue + 1) * value; // +1避免log(0)
-                        break;
-                    case MathOperationType.Gamma:
-                        result = Math.Pow(originalValue / 65535.0, value) * 65535.0;
-                        break;
-                }
+                    double result = originalValue;
+                    
+                    switch (operation)
+                    {
+                        case MathOperationType.Add:
+                            result = originalValue + value;
+                            break;
+                        case MathOperationType.Subtract:
+                            result = originalValue - value;
+                            break;
+                        case MathOperationType.Multiply:
+                            result = originalValue * value;
+                            break;
+                        case MathOperationType.Divide:
+                            result = value != 0 ? originalValue / value : originalValue;
+                            break;
+                        case MathOperationType.Power:
+                            // 防止幂运算溢出 - 限制base和exponent的范围
+                            if (originalValue > 1000 && value > 3)
+                                result = Math.Pow(1000, 3); // 限制最大值
+                            else if (originalValue > 100 && value > 5)
+                                result = Math.Pow(100, 5); // 限制最大值
+                            else
+                                result = Math.Pow(originalValue, value);
+                            break;
+                        case MathOperationType.Log:
+                            result = Math.Log(originalValue + 1) * value; // +1避免log(0)
+                            break;
+                        case MathOperationType.Gamma:
+                            // 归一化处理避免溢出
+                            double normalized = originalValue / 65535.0;
+                            result = Math.Pow(Math.Max(0.001, Math.Min(1.0, normalized)), value) * 65535.0;
+                            break;
+                    }
 
-                // 确保结果在有效范围内
-                return (ushort)Math.Max(0, Math.Min(65535, Math.Round(result)));
+                    // 确保结果在有效范围内，防止溢出
+                    if (double.IsInfinity(result) || double.IsNaN(result))
+                        return originalValue; // 发生溢出时返回原值
+                    
+                    result = Math.Max(0, Math.Min(65535, result));
+                    return (ushort)Math.Round(result);
+                }
+                catch
+                {
+                    // 发生任何异常时返回原值
+                    return originalValue;
+                }
             };
 
             return rule;
