@@ -279,3 +279,91 @@ Thumbs.db
 ~i_*
 ig_*
 zzzig_*
+
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+.pipenv/
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+
+# PyInstaller
+*.manifest
+*.spec
+dist/
+build/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.pytest_cache/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# IPython history
+.history
+
+# PyCharm / VSCode
+.idea/
+.vscode/
+*.code-workspace
+
+# MacOS / Linux / Windows system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# mypy / Pylint / Bandit / others
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+.pytest_cache/
+.pyright/
+
+# Profiling
+.prof
+*.lprof
+*.pstat
+
+# Jupyter notebooks output
+*.nbconvert.ipynb
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+
+# Local reports or output files
+output/
+reports/
+logs/
+
+# dotenv environment files
+.env
+.env.*
