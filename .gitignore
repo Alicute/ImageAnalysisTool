@@ -367,3 +367,7 @@ logs/
 # dotenv environment files
 .env
 .env.*
+
+
+
+.claude/
