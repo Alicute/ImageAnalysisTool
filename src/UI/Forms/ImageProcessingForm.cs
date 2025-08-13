@@ -490,15 +490,20 @@ namespace ImageAnalysisTool.UI.Forms
             InitializePixelProcessingTab();
             processingModeTab.TabPages.Add(pixelProcessingTab);
 
-            // Phase 2预留Tab
-            regionProcessingTab = new TabPage("区域处理 (Phase 2)");
-            regionProcessingTab.Controls.Add(new Label
+            // 区域处理Tab
+            regionProcessingTab = new TabPage("区域处理");
+            var openRegionProcessingBtn = new Button
             {
-                Text = "区域处理功能将在Phase 2实现",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
-                ForeColor = Color.Gray
-            });
+                Text = "打开高级区域处理工具",
+                Dock = DockStyle.None,
+                Location = new System.Drawing.Point(20, 20),
+                Size = new System.Drawing.Size(200, 50),
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                BackColor = Color.CornflowerBlue,
+                ForeColor = Color.White
+            };
+            openRegionProcessingBtn.Click += OpenRegionProcessingBtn_Click;
+            regionProcessingTab.Controls.Add(openRegionProcessingBtn);
             processingModeTab.TabPages.Add(regionProcessingTab);
 
             algorithmTuningTab = new TabPage("算法调参 (Phase 2)");
@@ -1305,6 +1310,26 @@ namespace ImageAnalysisTool.UI.Forms
             {
                 logger.Error(ex, "应用到原图失败");
                 MessageBox.Show($"应用到原图失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// 打开区域处理窗口
+        /// </summary>
+        private void OpenRegionProcessingBtn_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                logger.Info("准备打开区域处理窗口...");
+                using (var form = new RegionProcessingForm(this.originalImage))
+                {
+                    form.ShowDialog(this);
+                }
+            }
+            catch(Exception ex)
+            {
+                logger.Error(ex, "打开区域处理窗口失败");
+                MessageBox.Show($"打开区域处理窗口失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

@@ -16,21 +16,7 @@ using ImageAnalysisTool.Core.Models;
 using ImageAnalysisTool.Core.Enhancers;
 using NLog;
 
-/// <summary>
-/// ROI检测模式枚举
-/// </summary>
-public enum ROIMode
-{
-    /// <summary>
-    /// 通用OTSU阈值模式
-    /// </summary>
-    General,
 
-    /// <summary>
-    /// 工业X射线焊缝检测模式
-    /// </summary>
-    Weld
-}
 
 namespace ImageAnalysisTool.UI.Forms
 {
@@ -66,7 +52,11 @@ namespace ImageAnalysisTool.UI.Forms
 
         // 单图分析结果（用于AI专项分析）
         private ComprehensiveAnalysisResult? enhanced1AnalysisResult;
-        private ComprehensiveAnalysisResult? enhanced2AnalysisResult;
+                private ComprehensiveAnalysisResult? enhanced2AnalysisResult;
+
+        // 修复 CS0103: 将局部变量提升为类成员
+        private Panel mappingModePanel;
+        private RadioButton fullImageMappingRadio;
 
         // UI控件
         private ScrollableControl mainScrollPanel;  // 主滚动面板
@@ -81,16 +71,8 @@ namespace ImageAnalysisTool.UI.Forms
         private Button loadEnhanced2Btn;
         private Button analyzeBtn;
         private Button compareBtn;
-        private Button showROIButton;
         private Button exportReportBtn;
         private Button imageProcessingBtn;  // 新增：图像处理按钮
-        private ComboBox roiModeComboBox;
-        private Label roiModeLabel;
-
-        // 像素映射模式控件
-        private RadioButton fullImageMappingRadio;
-        private RadioButton roiMappingRadio;
-        private Panel mappingModePanel;
 
         // 新的列式布局控件
         private Panel originalColumnPanel;
@@ -187,7 +169,7 @@ namespace ImageAnalysisTool.UI.Forms
                                                    "• 原图和增强图的统计信息\n" +
                                                    "• 边缘区域分析\n" +
                                                    "• 中心区域分析\n" +
-                                                   "• ROI区域详细分析\n";
+                                                   "• 全图区域详细分析\n";
                 }
             }
             catch (Exception ex)
@@ -649,14 +631,6 @@ namespace ImageAnalysisTool.UI.Forms
             };
             compareBtn.Click += CompareBtn_Click;
 
-            showROIButton = new Button
-            {
-                Text = "显示ROI区域",
-                Size = new System.Drawing.Size(120, 35),
-                Margin = new Padding(5)
-            };
-            showROIButton.Click += ShowROIButton_Click;
-
             exportReportBtn = new Button
             {
                 Text = "导出完整报告",
@@ -680,34 +654,101 @@ namespace ImageAnalysisTool.UI.Forms
             };
             imageProcessingBtn.Click += ImageProcessingBtn_Click;
 
-            // 创建ROI模式选择控件
-            roiModeLabel = new Label
+            // 新增：高级区域处理工具按钮
+            Button advancedRegionProcessingBtn = new Button
             {
-                Text = "ROI模式:",
-                Size = new System.Drawing.Size(60, 35),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = new Font("Arial", 9),
-                Margin = new Padding(5)
+                Text = "高级区域处理",
+                Size = new System.Drawing.Size(120, 35),
+                Margin = new Padding(5),
+                BackColor = Color.LightBlue,
+                ForeColor = Color.Black
             };
+            advancedRegionProcessingBtn.Click += (s, e) => {
+                try
+                {
+                    // 创建并显示高级区域处理窗口
+                    // 如果有原图，使用原图；否则创建一个空的处理窗口
+                    Mat imageToProcess = null;
+                    if (originalImage != null)
+                    {
+                        imageToProcess = originalImage.Clone();
+                    }
+                    else if (enhancedImage != null)
+                    {
+                        imageToProcess = enhancedImage.Clone();
+                    }
+                    else if (enhanced2Image != null)
+                    {
+                        imageToProcess = enhanced2Image.Clone();
+                    }
 
-            roiModeComboBox = new ComboBox
+                    if (imageToProcess != null)
+                    {
+                        var regionProcessingForm = new RegionProcessingForm(imageToProcess);
+                        regionProcessingForm.ShowDialog(this);
+                        imageToProcess.Dispose();
+                    }
+                    else
+                    {
+                        // 创建一个空的处理窗口，让用户自己加载图像
+                        // 直接创建一个临时的空图像用于打开窗口，不显示提示
+                        Mat dummyImage = Mat.Zeros(512, 512, MatType.CV_16UC1);
+                        var regionProcessingForm = new RegionProcessingForm(dummyImage);
+                        regionProcessingForm.ShowDialog(this);
+                        dummyImage.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"打开高级区域处理窗口失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
+            
+            // 新增：ITK医学图像处理按钮
+            Button itkProcessingBtn = new Button
             {
-                Size = new System.Drawing.Size(100, 35),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Font = new Font("Arial", 9),
-                Margin = new Padding(5)
+                Text = "ITK医学处理",
+                Size = new System.Drawing.Size(120, 35),
+                Margin = new Padding(5),
+                BackColor = Color.LightGreen,
+                ForeColor = Color.Black
             };
-            roiModeComboBox.Items.AddRange(new object[] { "通用模式", "焊缝模式" });
-            roiModeComboBox.SelectedIndex = 0; // 默认选择通用模式
+            itkProcessingBtn.Click += (s, e) => {
+                try
+                {
+                    // 创建并显示ITK医学图像处理窗口
+                    // 如果有原图，使用原图；否则创建一个空的处理窗口
+                    Mat imageToProcess = null;
+                    if (originalImage != null)
+                    {
+                        imageToProcess = originalImage.Clone();
+                    }
+                    else if (enhancedImage != null)
+                    {
+                        imageToProcess = enhancedImage.Clone();
+                    }
+                    else if (enhanced2Image != null)
+                    {
+                        imageToProcess = enhanced2Image.Clone();
+                    }
 
-            // 创建像素映射模式控件
-            CreateMappingModeControls();
+                    var itkProcessingForm = new ITKMedicalProcessingForm(imageToProcess);
+                    itkProcessingForm.ShowDialog(this);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"打开ITK医学图像处理窗口失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
 
             // 添加按钮到布局
             buttonLayout.Controls.AddRange(new Control[] {
-                loadOriginalBtn, loadEnhancedBtn, loadEnhanced2Btn, analyzeBtn, compareBtn, showROIButton, exportReportBtn, imageProcessingBtn,
-                roiModeLabel, roiModeComboBox, mappingModePanel
+                loadOriginalBtn, loadEnhancedBtn, loadEnhanced2Btn, analyzeBtn, compareBtn, exportReportBtn, imageProcessingBtn, advancedRegionProcessingBtn, itkProcessingBtn
             });
+
+            // 修复 CS0103: 调用UI控件创建方法
+            CreateMappingModeControls();
+            buttonLayout.Controls.Add(mappingModePanel);
 
             topControlPanel.Controls.Add(buttonLayout);
 
@@ -740,27 +781,18 @@ namespace ImageAnalysisTool.UI.Forms
             };
             fullImageMappingRadio.CheckedChanged += MappingModeRadio_CheckedChanged;
 
-            roiMappingRadio = new RadioButton
-            {
-                Text = "ROI",
-                Location = new System.Drawing.Point(60, 8),
-                Size = new System.Drawing.Size(50, 20),
-                Font = new Font("Arial", 8)
-            };
-            roiMappingRadio.CheckedChanged += MappingModeRadio_CheckedChanged;
-
             // 添加标签
             var modeLabel = new Label
             {
                 Text = "映射:",
-                Location = new System.Drawing.Point(115, 8),
+                Location = new System.Drawing.Point(60, 8),
                 Size = new System.Drawing.Size(30, 20),
                 Font = new Font("Arial", 8),
                 TextAlign = ContentAlignment.MiddleLeft
             };
 
             mappingModePanel.Controls.AddRange(new Control[] {
-                fullImageMappingRadio, roiMappingRadio, modeLabel
+                fullImageMappingRadio, modeLabel
             });
         }
 
@@ -769,11 +801,8 @@ namespace ImageAnalysisTool.UI.Forms
         /// </summary>
         private void MappingModeRadio_CheckedChanged(object sender, EventArgs e)
         {
-            if (sender is RadioButton radio && radio.Checked)
-            {
-                // 重新绘制所有像素映射图
-                RefreshPixelMappingCharts();
-            }
+            // 重新绘制所有像素映射图
+            RefreshPixelMappingCharts();
         }
 
         /// <summary>
@@ -1130,8 +1159,6 @@ namespace ImageAnalysisTool.UI.Forms
             compareBtn.Enabled = canCompare;
             logger.Info($"对比分析按钮启用: {canCompare} (原图:{hasOriginal}, 增强图1:{hasEnhanced1}, 增强图2:{hasEnhanced2}, 尺寸匹配:{sizesMatch})");
 
-            showROIButton.Enabled = hasOriginal;
-
             // 启用图像处理按钮：至少需要原图和一个增强图
             bool canProcessImage = hasOriginal && (hasEnhanced1 || hasEnhanced2);
             imageProcessingBtn.Enabled = canProcessImage;
@@ -1187,7 +1214,7 @@ namespace ImageAnalysisTool.UI.Forms
                 // 执行单独的灰度值分析
                 PerformGrayValueAnalysis();
 
-                // 显示基础分析结果（直方图、基础信息、ROI灰度值分析）
+                // 显示基础分析结果（直方图、基础信息、全图灰度值分析）
                 DisplayBasicAnalysisResults();
 
                 analyzeBtn.Text = "重新分析";
@@ -1285,19 +1312,19 @@ namespace ImageAnalysisTool.UI.Forms
             enhanced1GrayValueAnalysis = "";
             enhanced2GrayValueAnalysis = "";
 
-            // 分析原图ROI灰度值
+            // 分析原图全图灰度值
             if (originalImage != null)
             {
                 originalGrayValueAnalysis = AnalyzeImageGrayValues(originalImage, "原图");
             }
 
-            // 分析增强图1 ROI灰度值
+            // 分析增强图1全图灰度值
             if (enhancedImage != null)
             {
                 enhanced1GrayValueAnalysis = AnalyzeImageGrayValues(enhancedImage, "增强图1");
             }
 
-            // 分析增强图2 ROI灰度值
+            // 分析增强图2全图灰度值
             if (enhanced2Image != null)
             {
                 enhanced2GrayValueAnalysis = AnalyzeImageGrayValues(enhanced2Image, "增强图2");
@@ -1354,7 +1381,7 @@ namespace ImageAnalysisTool.UI.Forms
             if (enhanced2Image != null)
                 DisplayHistogramForImage(enhanced2Image, enhanced2HistogramChart, "增强图2");
 
-            // 显示基础信息和ROI灰度值分析
+            // 显示基础信息和全图灰度值分析
             DisplayBasicImageInfo();
         }
 
@@ -1608,30 +1635,29 @@ namespace ImageAnalysisTool.UI.Forms
                 StringBuilder report = new StringBuilder();
                 report.AppendLine($"=== {targetName} vs {baseName} 对比分析 ===\n");
 
-                // ROI技术评分
-                report.AppendLine($"ROI技术评分: {result.ROITechnicalScore:F1}");
+                // 全图技术评分
                 report.AppendLine($"全图技术评分: {result.FullImageTechnicalScore:F1}");
 
                 // 质量指标
-                report.AppendLine($"\nROI质量指标:");
-                report.AppendLine($"  PSNR: {result.ROIQualityMetrics.PSNR:F2} dB");
-                report.AppendLine($"  SSIM: {result.ROIQualityMetrics.SSIM:F4}");
-                report.AppendLine($"  边缘质量: {result.ROIQualityMetrics.EdgeQuality:F2}");
-                report.AppendLine($"  过度增强评分: {result.ROIQualityMetrics.OverEnhancementScore:F2}");
+                report.AppendLine($"\n全图质量指标:");
+                report.AppendLine($"  PSNR: {result.FullImageQualityMetrics.PSNR:F2} dB");
+                report.AppendLine($"  SSIM: {result.FullImageQualityMetrics.SSIM:F4}");
+                report.AppendLine($"  边缘质量: {result.FullImageQualityMetrics.EdgeQuality:F2}");
+                report.AppendLine($"  过度增强评分: {result.FullImageQualityMetrics.OverEnhancementScore:F2}");
 
-                // 医学影像指标
-                report.AppendLine($"\nROI医学影像指标:");
-                report.AppendLine($"  信息保持度: {result.ROIMedicalMetrics.InformationPreservation:F2}");
-                report.AppendLine($"  细节保真度: {result.ROIMedicalMetrics.DetailFidelity:F2}");
-                report.AppendLine($"  动态范围利用: {result.ROIMedicalMetrics.DynamicRangeUtilization:F2}");
-                report.AppendLine($"  局部对比度增强: {result.ROIMedicalMetrics.LocalContrastEnhancement:F2}");
+                // 工业影像指标
+                report.AppendLine($"\n全图工业影像指标:");
+                report.AppendLine($"  信息保持度: {result.FullImageMedicalMetrics.InformationPreservation:F2}");
+                report.AppendLine($"  细节保真度: {result.FullImageMedicalMetrics.DetailFidelity:F2}");
+                report.AppendLine($"  动态范围利用: {result.FullImageMedicalMetrics.DynamicRangeUtilization:F2}");
+                report.AppendLine($"  局部对比度增强: {result.FullImageMedicalMetrics.LocalContrastEnhancement:F2}");
 
                 // 缺陷检测指标
-                report.AppendLine($"\nROI缺陷检测指标:");
-                report.AppendLine($"  细线缺陷可见性: {result.ROIDetectionMetrics.ThinLineVisibility:F2}");
-                report.AppendLine($"  背景噪声抑制: {result.ROIDetectionMetrics.BackgroundNoiseReduction:F2}");
-                report.AppendLine($"  缺陷背景对比度: {result.ROIDetectionMetrics.DefectBackgroundContrast:F2}");
-                report.AppendLine($"  综合适用性: {result.ROIDetectionMetrics.OverallSuitability:F2}");
+                report.AppendLine($"\n全图缺陷检测指标:");
+                report.AppendLine($"  细线缺陷可见性: {result.FullImageDetectionMetrics.ThinLineVisibility:F2}");
+                report.AppendLine($"  背景噪声抑制: {result.FullImageDetectionMetrics.BackgroundNoiseReduction:F2}");
+                report.AppendLine($"  缺陷背景对比度: {result.FullImageDetectionMetrics.DefectBackgroundContrast:F2}");
+                report.AppendLine($"  综合适用性: {result.FullImageDetectionMetrics.OverallSuitability:F2}");
 
                 return report.ToString();
             }
@@ -1653,16 +1679,15 @@ namespace ImageAnalysisTool.UI.Forms
                 section.AppendLine($"{viewerName} vs {compareName}\n");
 
                 // 综合评分对比
-                section.AppendLine($"ROI技术评分差异: {result.ROITechnicalScore:F1}");
                 section.AppendLine($"全图技术评分差异: {result.FullImageTechnicalScore:F1}");
 
                 // 推荐结论
                 string recommendation = "";
-                if (result.ROITechnicalScore > 5)
+                if (result.FullImageTechnicalScore > 5)
                 {
                     recommendation = viewerName == "增强图1" ? "推荐增强图1" : "推荐增强图2";
                 }
-                else if (result.ROITechnicalScore < -5)
+                else if (result.FullImageTechnicalScore < -5)
                 {
                     recommendation = viewerName == "增强图1" ? "推荐增强图2" : "推荐增强图1";
                 }
@@ -1675,14 +1700,14 @@ namespace ImageAnalysisTool.UI.Forms
 
                 // 主要差异分析
                 section.AppendLine($"\n主要差异:");
-                if (Math.Abs(result.ROIQualityMetrics.PSNR) > 1)
-                    section.AppendLine($"  PSNR差异: {result.ROIQualityMetrics.PSNR:F2} dB");
-                if (Math.Abs(result.ROIQualityMetrics.SSIM) > 0.01)
-                    section.AppendLine($"  SSIM差异: {result.ROIQualityMetrics.SSIM:F4}");
-                if (Math.Abs(result.ROIQualityMetrics.EdgeQuality) > 0.1)
-                    section.AppendLine($"  边缘质量差异: {result.ROIQualityMetrics.EdgeQuality:F2}");
-                if (Math.Abs(result.ROIMedicalMetrics.LocalContrastEnhancement) > 0.1)
-                    section.AppendLine($"  局部对比度差异: {result.ROIMedicalMetrics.LocalContrastEnhancement:F2}");
+                if (Math.Abs(result.FullImageQualityMetrics.PSNR) > 1)
+                    section.AppendLine($"  PSNR差异: {result.FullImageQualityMetrics.PSNR:F2} dB");
+                if (Math.Abs(result.FullImageQualityMetrics.SSIM) > 0.01)
+                    section.AppendLine($"  SSIM差异: {result.FullImageQualityMetrics.SSIM:F4}");
+                if (Math.Abs(result.FullImageQualityMetrics.EdgeQuality) > 0.1)
+                    section.AppendLine($"  边缘质量差异: {result.FullImageQualityMetrics.EdgeQuality:F2}");
+                if (Math.Abs(result.FullImageMedicalMetrics.LocalContrastEnhancement) > 0.1)
+                    section.AppendLine($"  局部对比度差异: {result.FullImageMedicalMetrics.LocalContrastEnhancement:F2}");
 
                 return section.ToString();
             }
@@ -1867,7 +1892,7 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 为两个图像显示像素映射关系（改进版：曲线+差值显示）
+        /// 显示像素映射关系（改进版：曲线+差值显示）
         /// </summary>
         private void DisplayPixelMappingForImages(Mat sourceImage, Mat targetImage, Chart chart, string title)
         {
@@ -1880,48 +1905,9 @@ namespace ImageAnalysisTool.UI.Forms
                 bool is16Bit = sourceImage.Type() == MatType.CV_16UC1;
                 int maxValue = is16Bit ? 65535 : 255;
 
-                // 根据当前模式收集映射数据（智能降级处理）
-                Dictionary<int, int> mappingData;
-                string modeText;
-
-                if (roiMappingRadio != null && roiMappingRadio.Checked)
-                {
-                    // ROI模式：尝试分析ROI区域，失败时自动降级到全图
-                    try
-                    {
-                        Mat roiMask = CreateROIMaskForAnalysis(sourceImage);
-                        int roiPixels = Cv2.CountNonZero(roiMask);
-                        int totalPixels = sourceImage.Width * sourceImage.Height;
-
-                        // 检查ROI是否有效
-                        if (roiPixels > 0 && roiPixels < totalPixels * 0.95)
-                        {
-                            // ROI有效，使用ROI分析
-                            mappingData = CollectMappingDataForCurveROI(sourceImage, targetImage, roiMask, is16Bit);
-                            modeText = " (ROI分析)";
-                        }
-                        else
-                        {
-                            // ROI无效，降级到全图分析
-                            mappingData = CollectMappingDataForCurve(sourceImage, targetImage, is16Bit);
-                            modeText = roiPixels == 0 ? " (ROI检测失败，使用全图分析)" : " (ROI过大，使用全图分析)";
-                        }
-                        roiMask.Dispose();
-                    }
-                    catch (Exception ex)
-                    {
-                        // ROI处理异常，降级到全图分析
-                        Console.WriteLine($"ROI分析异常，降级到全图分析: {ex.Message}");
-                        mappingData = CollectMappingDataForCurve(sourceImage, targetImage, is16Bit);
-                        modeText = " (ROI分析异常，使用全图分析)";
-                    }
-                }
-                else
-                {
-                    // 全图模式：分析整个图像
-                    mappingData = CollectMappingDataForCurve(sourceImage, targetImage, is16Bit);
-                    modeText = " (全图分析)";
-                }
+                // 收集映射数据（全图分析模式）
+                Dictionary<int, int> mappingData = CollectMappingDataForCurve(sourceImage, targetImage, is16Bit);
+                string modeText = " (全图分析)";
 
                 // 1. 创建映射曲线系列
                 var curveSeries = new Series("映射曲线")
@@ -2028,22 +2014,6 @@ namespace ImageAnalysisTool.UI.Forms
         /// </summary>
         private Dictionary<int, int> CollectMappingDataForCurve(Mat sourceImage, Mat targetImage, bool is16Bit)
         {
-            return CollectMappingDataForCurveInternal(sourceImage, targetImage, null, is16Bit);
-        }
-
-        /// <summary>
-        /// 收集ROI区域的映射数据用于曲线显示
-        /// </summary>
-        private Dictionary<int, int> CollectMappingDataForCurveROI(Mat sourceImage, Mat targetImage, Mat roiMask, bool is16Bit)
-        {
-            return CollectMappingDataForCurveInternal(sourceImage, targetImage, roiMask, is16Bit);
-        }
-
-        /// <summary>
-        /// 内部方法：收集映射数据（支持ROI掩码）
-        /// </summary>
-        private Dictionary<int, int> CollectMappingDataForCurveInternal(Mat sourceImage, Mat targetImage, Mat roiMask, bool is16Bit)
-        {
             var mappingGroups = new Dictionary<int, List<int>>();
             int maxValue = is16Bit ? 65535 : 255;
 
@@ -2061,14 +2031,6 @@ namespace ImageAnalysisTool.UI.Forms
                 {
                     if (x < sourceImage.Width && y < sourceImage.Height)
                     {
-                        // 如果有ROI掩码，检查当前像素是否在ROI区域内
-                        if (roiMask != null)
-                        {
-                            byte maskValue = roiMask.Get<byte>(y, x);
-                            if (maskValue == 0) // 不在ROI区域内，跳过
-                                continue;
-                        }
-
                         int sourceVal, targetVal;
 
                         if (is16Bit)
@@ -2525,223 +2487,7 @@ namespace ImageAnalysisTool.UI.Forms
             resultTextBox.Text = text;
         }
 
-        /// <summary>
-        /// 显示ROI区域按钮点击事件
-        /// </summary>
-        private void ShowROIButton_Click(object sender, EventArgs e)
-        {
-            if (originalImage == null)
-            {
-                MessageBox.Show("请先加载原图", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            try
-            {
-                // 创建ROI可视化图像
-                Mat roiVisualization = CreateROIVisualization(originalImage);
-
-                // 在新窗口中显示ROI可视化结果
-                ShowROIVisualizationWindow(roiVisualization);
-
-                roiVisualization.Dispose();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"显示ROI区域失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-
-
-        /// <summary>
-        /// 创建ROI区域可视化图像
-        /// </summary>
-        private Mat CreateROIVisualization(Mat originalImage)
-        {
-            // 创建彩色显示图像（转换为8位3通道）
-            Mat display8bit = new Mat();
-            originalImage.ConvertTo(display8bit, MatType.CV_8UC1, 255.0 / 65535.0);
-
-            Mat colorDisplay = new Mat();
-            Cv2.CvtColor(display8bit, colorDisplay, ColorConversionCodes.GRAY2BGR);
-
-            // 获取当前ROI模式
-            ROIMode mode = GetSelectedROIMode();
-
-            // 根据模式创建ROI掩码
-            Mat roiMask = CreateIndustrialROIMask(originalImage, mode);
-
-            // 根据模式显示不同的可视化信息
-            if (mode == ROIMode.Weld)
-            {
-                DrawWeldROIVisualization(colorDisplay, originalImage, roiMask);
-            }
-            else
-            {
-                DrawGeneralROIVisualization(colorDisplay, originalImage, roiMask);
-            }
-
-            // 清理临时Mat对象
-            display8bit.Dispose();
-
-            return colorDisplay;
-        }
-
-        /// <summary>
-        /// 绘制通用ROI可视化
-        /// </summary>
-        private void DrawGeneralROIVisualization(Mat colorDisplay, Mat originalImage, Mat roiMask)
-        {
-            // 找到工件轮廓
-            OpenCvSharp.Point[][] contours;
-            HierarchyIndex[] hierarchy;
-            Cv2.FindContours(roiMask, out contours, out hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
-
-            // 绘制工件轮廓（绿色）
-            for (int i = 0; i < contours.Length; i++)
-            {
-                Cv2.DrawContours(colorDisplay, contours, i, Scalar.Green, 2);
-            }
-
-            // 计算并绘制工件边界框（红色）
-            if (contours.Length > 0)
-            {
-                var allPoints = contours.SelectMany(c => c).ToArray();
-                if (allPoints.Length > 0)
-                {
-                    var boundingRect = Cv2.BoundingRect(allPoints);
-                    Cv2.Rectangle(colorDisplay, boundingRect, Scalar.Red, 3);
-                }
-            }
-
-            // 添加阈值信息文字（黄色）
-            Mat binary = new Mat();
-            double threshold = Cv2.Threshold(originalImage, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-            string thresholdInfo = $"通用模式 - OTSU阈值: {threshold:F0}";
-            Cv2.PutText(colorDisplay, thresholdInfo, new OpenCvSharp.Point(10, 30),
-                HersheyFonts.HersheySimplex, 0.8, Scalar.Yellow, 2);
-
-            // 计算ROI区域占比
-            int roiPixels = Cv2.CountNonZero(roiMask);
-            double roiRatio = (double)roiPixels / (originalImage.Width * originalImage.Height) * 100;
-            string roiInfo = $"ROI区域占比: {roiRatio:F1}%";
-            Cv2.PutText(colorDisplay, roiInfo, new OpenCvSharp.Point(10, 70),
-                HersheyFonts.HersheySimplex, 0.8, Scalar.Yellow, 2);
-
-            binary.Dispose();
-        }
-
-        /// <summary>
-        /// 绘制焊缝ROI可视化
-        /// </summary>
-        private void DrawWeldROIVisualization(Mat colorDisplay, Mat originalImage, Mat roiMask)
-        {
-            // 找到焊缝轮廓
-            OpenCvSharp.Point[][] contours;
-            HierarchyIndex[] hierarchy;
-            Cv2.FindContours(roiMask, out contours, out hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
-
-            // 绘制焊缝轮廓（蓝色，区别于通用模式）
-            for (int i = 0; i < contours.Length; i++)
-            {
-                Cv2.DrawContours(colorDisplay, contours, i, Scalar.Blue, 2);
-            }
-
-            // 计算并绘制焊缝边界框（橙色）
-            if (contours.Length > 0)
-            {
-                var allPoints = contours.SelectMany(c => c).ToArray();
-                if (allPoints.Length > 0)
-                {
-                    var boundingRect = Cv2.BoundingRect(allPoints);
-                    Cv2.Rectangle(colorDisplay, boundingRect, new Scalar(0, 165, 255), 3); // 橙色
-                }
-            }
-
-            // 计算双阈值信息
-            Mat binary1 = new Mat();
-            double threshold1 = Cv2.Threshold(originalImage, binary1, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-            double threshold2 = threshold1 * 1.2;
-
-            // 添加焊缝检测信息文字（青色）
-            string weldInfo = $"焊缝模式 - 低阈值: {threshold1:F0}, 高阈值: {threshold2:F0}";
-            Cv2.PutText(colorDisplay, weldInfo, new OpenCvSharp.Point(10, 30),
-                HersheyFonts.HersheySimplex, 0.7, Scalar.Cyan, 2);
-
-            // 计算焊缝区域占比
-            int weldPixels = Cv2.CountNonZero(roiMask);
-            double weldRatio = (double)weldPixels / (originalImage.Width * originalImage.Height) * 100;
-            string roiInfo = $"焊缝区域占比: {weldRatio:F1}%";
-            Cv2.PutText(colorDisplay, roiInfo, new OpenCvSharp.Point(10, 70),
-                HersheyFonts.HersheySimplex, 0.7, Scalar.Cyan, 2);
-
-            // 添加焊缝质量评估
-            string qualityInfo = GetWeldROIQualityAssessment(weldRatio, contours.Length);
-            Cv2.PutText(colorDisplay, qualityInfo, new OpenCvSharp.Point(10, 110),
-                HersheyFonts.HersheySimplex, 0.7, Scalar.Cyan, 2);
-
-            binary1.Dispose();
-        }
-
-        /// <summary>
-        /// 获取焊缝ROI质量评估
-        /// </summary>
-        private string GetWeldROIQualityAssessment(double weldRatio, int contourCount)
-        {
-            if (weldRatio < 10)
-                return "质量评估: 焊缝区域过小，可能检测不准确";
-            else if (weldRatio > 60)
-                return "质量评估: 焊缝区域过大，可能包含过多背景";
-            else if (contourCount > 10)
-                return "质量评估: 焊缝区域过于分散，建议调整参数";
-            else
-                return "质量评估: 焊缝区域检测良好";
-        }
-
-        /// <summary>
-        /// 在新窗口中显示ROI可视化结果
-        /// </summary>
-        private void ShowROIVisualizationWindow(Mat roiVisualization)
-        {
-            // 根据当前ROI模式设置窗口标题
-            ROIMode mode = GetSelectedROIMode();
-            string windowTitle = mode == ROIMode.Weld ? "焊缝ROI区域可视化" : "通用ROI区域可视化";
-
-            Form roiForm = new Form
-            {
-                Text = windowTitle,
-                Size = new System.Drawing.Size(800, 600),
-                StartPosition = FormStartPosition.CenterParent
-            };
-
-            PictureBox roiPictureBox = new PictureBox
-            {
-                Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.Zoom,
-                Image = roiVisualization.ToBitmap()
-            };
-
-            // 根据当前ROI模式显示不同的说明信息
-            ROIMode currentMode = GetSelectedROIMode();
-            string infoText = currentMode == ROIMode.Weld
-                ? "蓝色线条：焊缝轮廓  |  橙色框：焊缝边界框  |  青色文字：焊缝检测信息"
-                : "绿色线条：工件轮廓  |  红色框：工件边界框  |  黄色文字：阈值信息";
-
-            Label infoLabel = new Label
-            {
-                Text = infoText,
-                Dock = DockStyle.Bottom,
-                Height = 30,
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.LightGray
-            };
-
-            roiForm.Controls.Add(roiPictureBox);
-            roiForm.Controls.Add(infoLabel);
-
-            roiForm.ShowDialog(this);
-        }
+        
 
         /// <summary>
         /// 显示灰度值分布分析（旧版本，保留兼容性）
@@ -2774,10 +2520,6 @@ namespace ImageAnalysisTool.UI.Forms
             text += "【工件区域检测分析】\n";
             text += AnalyzeWorkpieceRegion();
             text += "\n";
-
-            // ROI区域内部灰度值分析
-            text += "【ROI区域内部灰度值分析】\n";
-            text += AnalyzeROIRegionGrayValues();
 
             grayValueAnalysisTextBox.Text = text;
         }
@@ -3087,184 +2829,7 @@ namespace ImageAnalysisTool.UI.Forms
             }
         }
 
-        /// <summary>
-        /// 分析ROI区域内部的灰度值分布
-        /// </summary>
-        private string AnalyzeROIRegionGrayValues()
-        {
-            if (originalImage == null || enhancedImage == null)
-                return "需要加载原图和增强后图像\n";
-
-            try
-            {
-                var result = "";
-
-                // 创建ROI掩码（使用与RetinexEnhancer相同的方法）
-                Mat originalROIMask = CreateROIMaskForAnalysis(originalImage);
-                Mat enhancedROIMask = CreateROIMaskForAnalysis(enhancedImage);
-
-                // 分析原图ROI区域
-                result += "【原图ROI区域灰度值分析】\n";
-                result += AnalyzeROIGrayValues(originalImage, originalROIMask, "原图ROI");
-                result += "\n";
-
-                // 分析增强后ROI区域
-                result += "【增强后ROI区域灰度值分析】\n";
-                result += AnalyzeROIGrayValues(enhancedImage, enhancedROIMask, "增强后ROI");
-                result += "\n";
-
-                // 对比分析
-                result += "【ROI区域对比分析】\n";
-                result += CompareROIRegions(originalImage, enhancedImage, originalROIMask, enhancedROIMask);
-
-                // 清理资源
-                originalROIMask.Dispose();
-                enhancedROIMask.Dispose();
-
-                return result;
-            }
-            catch (Exception ex)
-            {
-                return $"ROI分析失败: {ex.Message}\n";
-            }
-        }
-
-        /// <summary>
-        /// 创建ROI掩码用于分析（与RetinexEnhancer使用相同的算法）
-        /// </summary>
-        private Mat CreateROIMaskForAnalysis(Mat input)
-        {
-            try
-            {
-                // 使用OTSU阈值分割来区分工件区域和过曝区域
-                Mat binary = new Mat();
-                double threshold = Cv2.Threshold(input, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-
-                // 转换为8位掩码
-                Mat mask8 = new Mat();
-                binary.ConvertTo(mask8, MatType.CV_8U);
-
-                // 创建工件区域掩码（反转二值图像，因为工件区域灰度值较低）
-                Mat roiMask = new Mat();
-                Cv2.BitwiseNot(mask8, roiMask);
-
-                // 形态学操作去除噪声
-                Mat kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(5, 5));
-                Mat cleaned = new Mat();
-                Cv2.MorphologyEx(roiMask, cleaned, MorphTypes.Close, kernel);
-                Cv2.MorphologyEx(cleaned, roiMask, MorphTypes.Open, kernel);
-
-                // 清理资源
-                binary.Dispose();
-                mask8.Dispose();
-                cleaned.Dispose();
-                kernel.Dispose();
-
-                return roiMask;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"CreateROIMaskForAnalysis Error: {ex.Message}");
-                // 返回全白掩码（处理所有区域）
-                return Mat.Ones(input.Size(), MatType.CV_8U) * 255;
-            }
-        }
-
-        /// <summary>
-        /// 分析ROI区域的灰度值
-        /// </summary>
-        private string AnalyzeROIGrayValues(Mat image, Mat roiMask, string regionName)
-        {
-            try
-            {
-                var result = "";
-
-                // 计算ROI区域的统计信息
-                Scalar mean, stddev;
-                Cv2.MeanStdDev(image, out mean, out stddev, roiMask);
-
-                // 获取ROI区域的像素值
-                Mat roiPixels = new Mat();
-                image.CopyTo(roiPixels, roiMask);
-
-                // 计算ROI区域的最小最大值
-                double minVal, maxVal;
-                OpenCvSharp.Point minLoc, maxLoc;
-                Cv2.MinMaxLoc(roiPixels, out minVal, out maxVal, out minLoc, out maxLoc, roiMask);
-
-                // 计算ROI区域像素数量
-                int roiPixelCount = Cv2.CountNonZero(roiMask);
-                int totalPixels = image.Rows * image.Cols;
-                double roiRatio = (double)roiPixelCount / totalPixels * 100;
-
-                result += $"ROI区域像素占比: {roiRatio:F1}%\n";
-                result += $"ROI区域平均值: {mean.Val0:F0}\n";
-                result += $"ROI区域标准差: {stddev.Val0:F0}\n";
-                result += $"ROI区域最小值: {minVal:F0}\n";
-                result += $"ROI区域最大值: {maxVal:F0}\n";
-                result += $"ROI区域动态范围: {maxVal - minVal:F0}\n";
-                result += $"ROI区域变异系数(CV): {(stddev.Val0 / mean.Val0 * 100):F1}%\n";
-
-                roiPixels.Dispose();
-                return result;
-            }
-            catch (Exception ex)
-            {
-                return $"{regionName}分析失败: {ex.Message}\n";
-            }
-        }
-
-        /// <summary>
-        /// 对比ROI区域的变化
-        /// </summary>
-        private string CompareROIRegions(Mat originalImage, Mat enhancedImage, Mat originalROIMask, Mat enhancedROIMask)
-        {
-            try
-            {
-                var result = "";
-
-                // 计算原图ROI统计
-                Scalar origMean, origStddev;
-                Cv2.MeanStdDev(originalImage, out origMean, out origStddev, originalROIMask);
-
-                // 计算增强后ROI统计
-                Scalar enhMean, enhStddev;
-                Cv2.MeanStdDev(enhancedImage, out enhMean, out enhStddev, enhancedROIMask);
-
-                // 计算变化
-                double meanChange = enhMean.Val0 - origMean.Val0;
-                double meanChangeRatio = enhMean.Val0 / origMean.Val0;
-                double stddevChange = enhStddev.Val0 - origStddev.Val0;
-                double stddevChangeRatio = enhStddev.Val0 / origStddev.Val0;
-
-                result += $"ROI平均值变化: {origMean.Val0:F0} → {enhMean.Val0:F0} (变化: {meanChange:+F0}, 比例: {meanChangeRatio:F2}x)\n";
-                result += $"ROI标准差变化: {origStddev.Val0:F0} → {enhStddev.Val0:F0} (变化: {stddevChange:+F0}, 比例: {stddevChangeRatio:F2}x)\n";
-
-                // 分析增强效果
-                result += "\n【ROI增强效果评估】\n";
-                if (meanChangeRatio > 1.1)
-                    result += "✓ ROI区域亮度有效提升\n";
-                else if (meanChangeRatio < 0.9)
-                    result += "⚠ ROI区域亮度降低\n";
-                else
-                    result += "- ROI区域亮度基本保持\n";
-
-                if (stddevChangeRatio > 1.2)
-                    result += "✓ ROI区域对比度显著增强\n";
-                else if (stddevChangeRatio > 1.05)
-                    result += "✓ ROI区域对比度适度增强\n";
-                else if (stddevChangeRatio < 0.9)
-                    result += "⚠ ROI区域对比度降低\n";
-                else
-                    result += "- ROI区域对比度基本保持\n";
-
-                return result;
-            }
-            catch (Exception ex)
-            {
-                return $"ROI对比分析失败: {ex.Message}\n";
-            }
-        }
+        
 
         /// <summary>
         /// 加载DICOM图像
@@ -3303,30 +2868,16 @@ namespace ImageAnalysisTool.UI.Forms
         {
             var config = AnalysisConfiguration.Default;
 
-            // 创建ROI掩码（统一使用通用OTSU方法）
-            Mat roiMask = CreateROIMaskForAnalysis(original);
+            // 执行全图分析
+            var fullQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(original, enhanced, config);
+            var fullMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(original, enhanced, config);
+            var fullDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(original, enhanced, config);
 
-            // 执行ROI区域分析
-            var roiQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(original, enhanced, config, roiMask);
-            var roiMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(original, enhanced, config, roiMask);
-            var roiDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(original, enhanced, config, roiMask);
+            // 生成问题诊断
+            var diagnostics = GenerateDiagnostics(fullQualityMetrics, fullMedicalMetrics, fullDetectionMetrics);
 
-            // 执行全图分析（用于对比）
-            var fullQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(original, enhanced, config, null);
-            var fullMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(original, enhanced, config, null);
-            var fullDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(original, enhanced, config, null);
-
-            // 生成问题诊断（基于ROI分析）
-            var diagnostics = GenerateDiagnostics(roiQualityMetrics, roiMedicalMetrics, roiDetectionMetrics);
-
-            // 生成参数优化建议（基于ROI分析）
-            var optimizations = GenerateOptimizationSuggestions(roiQualityMetrics, roiMedicalMetrics, roiDetectionMetrics);
-
-            // 计算ROI综合评分
-            double roiTechnicalScore = CalculateTechnicalScore(roiQualityMetrics);
-            double roiMedicalScore = roiMedicalMetrics.OverallMedicalQuality;
-            double roiDetectionScore = roiDetectionMetrics.OverallSuitability;
-            double roiOverallRecommendation = (roiTechnicalScore + roiMedicalScore + roiDetectionScore) / 3;
+            // 生成参数优化建议
+            var optimizations = GenerateOptimizationSuggestions(fullQualityMetrics, fullMedicalMetrics, fullDetectionMetrics);
 
             // 计算全图综合评分
             double fullTechnicalScore = CalculateTechnicalScore(fullQualityMetrics);
@@ -3334,129 +2885,18 @@ namespace ImageAnalysisTool.UI.Forms
             double fullDetectionScore = fullDetectionMetrics.OverallSuitability;
             double fullOverallRecommendation = (fullTechnicalScore + fullMedicalScore + fullDetectionScore) / 3;
 
-            // 清理资源
-            roiMask?.Dispose();
-
             return new ComprehensiveAnalysisResult
             {
-                ROIQualityMetrics = roiQualityMetrics,
-                ROIMedicalMetrics = roiMedicalMetrics,
-                ROIDetectionMetrics = roiDetectionMetrics,
                 FullImageQualityMetrics = fullQualityMetrics,
                 FullImageMedicalMetrics = fullMedicalMetrics,
                 FullImageDetectionMetrics = fullDetectionMetrics,
                 DiagnosticResults = diagnostics,
                 OptimizationSuggestions = optimizations,
-                ROITechnicalScore = roiTechnicalScore,
-                ROIMedicalScore = roiMedicalScore,
-                ROIDetectionScore = roiDetectionScore,
-                ROIOverallRecommendation = roiOverallRecommendation,
                 FullImageTechnicalScore = fullTechnicalScore,
                 FullImageMedicalScore = fullMedicalScore,
                 FullImageDetectionScore = fullDetectionScore,
                 FullImageOverallRecommendation = fullOverallRecommendation
             };
-        }
-
-        /// <summary>
-        /// 创建ROI掩码（支持多种模式）
-        /// </summary>
-        private Mat CreateROIMask(Mat image)
-        {
-            // 获取当前选择的ROI模式
-            ROIMode mode = GetSelectedROIMode();
-            return CreateIndustrialROIMask(image, mode);
-        }
-
-        /// <summary>
-        /// 获取当前选择的ROI模式
-        /// </summary>
-        private ROIMode GetSelectedROIMode()
-        {
-            if (roiModeComboBox?.SelectedIndex == 1)
-                return ROIMode.Weld;
-            return ROIMode.General;
-        }
-
-        /// <summary>
-        /// 创建工业X射线ROI掩码（支持通用和焊缝模式）
-        /// </summary>
-        private Mat CreateIndustrialROIMask(Mat image, ROIMode mode)
-        {
-            try
-            {
-                if (mode == ROIMode.Weld)
-                {
-                    // 使用WeldDefectEnhancer的焊缝ROI检测算法
-                    return CreateWeldROIMask(image);
-                }
-                else
-                {
-                    // 使用通用OTSU阈值方法
-                    return CreateGeneralROIMask(image);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"创建ROI掩码失败: {ex.Message}");
-                // 如果出错，返回全图掩码
-                return Mat.Ones(image.Size(), MatType.CV_8UC1);
-            }
-        }
-
-        /// <summary>
-        /// 创建通用ROI掩码（原有的OTSU方法）
-        /// </summary>
-        private Mat CreateGeneralROIMask(Mat image)
-        {
-            // 使用OTSU阈值分割来区分工件区域和过曝区域
-            Mat binary = new Mat();
-            double threshold = Cv2.Threshold(image, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-
-            // 创建掩码：保留低于阈值的区域（工件区域）
-            Mat mask = new Mat();
-            Cv2.Threshold(image, mask, threshold * 0.8, 255, ThresholdTypes.BinaryInv);
-            mask.ConvertTo(mask, MatType.CV_8UC1, 1.0 / 256.0);
-
-            binary.Dispose();
-            return mask;
-        }
-
-        /// <summary>
-        /// 创建焊缝专用ROI掩码（基于WeldDefectEnhancer算法）
-        /// </summary>
-        private Mat CreateWeldROIMask(Mat image)
-        {
-            // 使用双阈值方法检测焊缝区域
-            Mat binary1 = new Mat();
-            Mat binary2 = new Mat();
-
-            // 第一个阈值：检测低灰度区域(焊缝和热影响区)
-            double threshold1 = Cv2.Threshold(image, binary1, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-
-            // 第二个阈值：检测中等灰度区域
-            double threshold2 = threshold1 * 1.2;
-            Cv2.Threshold(image, binary2, threshold2, 255, ThresholdTypes.Binary);
-
-            // 组合两个阈值结果，创建焊缝区域掩码
-            Mat weldMask = new Mat();
-            Cv2.BitwiseOr(binary1, binary2, weldMask);
-            Cv2.BitwiseNot(weldMask, weldMask); // 反转，焊缝区域为白色
-
-            // 形态学操作优化掩码
-            Mat kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(3, 3));
-            Cv2.MorphologyEx(weldMask, weldMask, MorphTypes.Close, kernel);
-            Cv2.MorphologyEx(weldMask, weldMask, MorphTypes.Open, kernel);
-
-            // 转换为8位掩码
-            weldMask.ConvertTo(weldMask, MatType.CV_8UC1);
-
-            // 清理资源
-            binary1.Dispose();
-            binary2.Dispose();
-            kernel.Dispose();
-
-            return weldMask;
         }
 
         /// <summary>
@@ -3476,38 +2916,32 @@ namespace ImageAnalysisTool.UI.Forms
         {
             var report = "\n=== 增强版图像质量分析 ===\n\n";
 
-            // ROI区域分析（主要关注）
-            report += "【ROI区域质量评估】\n";
-            if (result.ROIQualityMetrics.SSIM > 0)
-                report += $"结构相似性(SSIM): {result.ROIQualityMetrics.SSIM:F3} ({GetQualityRating(result.ROIQualityMetrics.SSIM, 0.8, 0.9)})\n";
-            report += $"峰值信噪比(PSNR): {result.ROIQualityMetrics.PSNR:F1} dB ({GetQualityRating(result.ROIQualityMetrics.PSNR, 20, 30)})\n";
-            report += $"过度增强评分: {result.ROIQualityMetrics.OverEnhancementScore:F1}% ({GetRiskRating(result.ROIQualityMetrics.OverEnhancementScore)})\n";
-            report += $"噪声放大程度: {result.ROIQualityMetrics.NoiseAmplification:F2}x ({GetAmplificationRating(result.ROIQualityMetrics.NoiseAmplification)})\n";
-            report += $"边缘质量评分: {result.ROIQualityMetrics.EdgeQuality:F1}/100 ({GetScoreRating(result.ROIQualityMetrics.EdgeQuality)})\n";
-            report += $"光晕效应检测: {result.ROIQualityMetrics.HaloEffect:F1}% ({GetRiskRating(result.ROIQualityMetrics.HaloEffect)})\n\n";
+            // 全图分析
+            report += "【全图质量评估】\n";
+            if (result.FullImageQualityMetrics.SSIM > 0)
+                report += $"结构相似性(SSIM): {result.FullImageQualityMetrics.SSIM:F3} ({GetQualityRating(result.FullImageQualityMetrics.SSIM, 0.8, 0.9)})\n";
+            report += $"峰值信噪比(PSNR): {result.FullImageQualityMetrics.PSNR:F1} dB ({GetQualityRating(result.FullImageQualityMetrics.PSNR, 20, 30)})\n";
+            report += $"过度增强评分: {result.FullImageQualityMetrics.OverEnhancementScore:F1}% ({GetRiskRating(result.FullImageQualityMetrics.OverEnhancementScore)})\n";
+            report += $"噪声放大程度: {result.FullImageQualityMetrics.NoiseAmplification:F2}x ({GetAmplificationRating(result.FullImageQualityMetrics.NoiseAmplification)})\n";
+            report += $"边缘质量评分: {result.FullImageQualityMetrics.EdgeQuality:F1}/100 ({GetScoreRating(result.FullImageQualityMetrics.EdgeQuality)})\n";
+            report += $"光晕效应检测: {result.FullImageQualityMetrics.HaloEffect:F1}% ({GetRiskRating(result.FullImageQualityMetrics.HaloEffect)})\n\n";
 
-            // ROI医学影像专用指标
-            report += "【ROI区域医学影像质量评估】\n";
-            report += $"信息保持度: {result.ROIMedicalMetrics.InformationPreservation:F1}/100 ({GetScoreRating(result.ROIMedicalMetrics.InformationPreservation)})\n";
-            report += $"动态范围利用率: {result.ROIMedicalMetrics.DynamicRangeUtilization:F1}/100 ({GetScoreRating(result.ROIMedicalMetrics.DynamicRangeUtilization)})\n";
-            report += $"局部对比度增强效果: {result.ROIMedicalMetrics.LocalContrastEnhancement:F1}/100 ({GetScoreRating(result.ROIMedicalMetrics.LocalContrastEnhancement)})\n";
-            report += $"细节保真度: {result.ROIMedicalMetrics.DetailFidelity:F1}/100 ({GetScoreRating(result.ROIMedicalMetrics.DetailFidelity)})\n";
-            report += $"窗宽窗位适应性: {result.ROIMedicalMetrics.WindowLevelAdaptability:F1}/100 ({GetScoreRating(result.ROIMedicalMetrics.WindowLevelAdaptability)})\n";
-            report += $"医学影像质量综合评分: {result.ROIMedicalMetrics.OverallMedicalQuality:F1}/100 ({GetScoreRating(result.ROIMedicalMetrics.OverallMedicalQuality)})\n\n";
+            // 医学影像专用指标
+            report += "【医学影像质量评估】\n";
+            report += $"信息保持度: {result.FullImageMedicalMetrics.InformationPreservation:F1}/100 ({GetScoreRating(result.FullImageMedicalMetrics.InformationPreservation)})\n";
+            report += $"动态范围利用率: {result.FullImageMedicalMetrics.DynamicRangeUtilization:F1}/100 ({GetScoreRating(result.FullImageMedicalMetrics.DynamicRangeUtilization)})\n";
+            report += $"局部对比度增强效果: {result.FullImageMedicalMetrics.LocalContrastEnhancement:F1}/100 ({GetScoreRating(result.FullImageMedicalMetrics.LocalContrastEnhancement)})\n";
+            report += $"细节保真度: {result.FullImageMedicalMetrics.DetailFidelity:F1}/100 ({GetScoreRating(result.FullImageMedicalMetrics.DetailFidelity)})\n";
+            report += $"窗宽窗位适应性: {result.FullImageMedicalMetrics.WindowLevelAdaptability:F1}/100 ({GetScoreRating(result.FullImageMedicalMetrics.WindowLevelAdaptability)})\n";
+            report += $"医学影像质量综合评分: {result.FullImageMedicalMetrics.OverallMedicalQuality:F1}/100 ({GetScoreRating(result.FullImageMedicalMetrics.OverallMedicalQuality)})\n\n";
 
-            // ROI缺陷检测友好度指标
-            report += "【ROI区域缺陷检测友好度】\n";
-            report += $"细线缺陷可见性提升: {result.ROIDetectionMetrics.ThinLineVisibility:F1}% ({GetImprovementRating(result.ROIDetectionMetrics.ThinLineVisibility)})\n";
-            report += $"背景噪声抑制效果: {result.ROIDetectionMetrics.BackgroundNoiseReduction:F1}% ({GetScoreRating(result.ROIDetectionMetrics.BackgroundNoiseReduction)})\n";
-            report += $"缺陷对比度提升: {result.ROIDetectionMetrics.DefectBackgroundContrast:F2}x ({GetContrastRating(result.ROIDetectionMetrics.DefectBackgroundContrast)})\n";
-            report += $"假阳性风险评估: {result.ROIDetectionMetrics.FalsePositiveRisk:F1}% ({GetRiskRating(result.ROIDetectionMetrics.FalsePositiveRisk)})\n";
-            report += $"缺陷检测适用性: {result.ROIDetectionMetrics.OverallSuitability:F1}/100 ({GetScoreRating(result.ROIDetectionMetrics.OverallSuitability)})\n\n";
-
-            // 全图对比分析（参考）
-            report += "【全图分析对比（含过曝区域影响）】\n";
-            report += $"全图医学影像质量: {result.FullImageMedicalMetrics.OverallMedicalQuality:F1}/100 vs ROI: {result.ROIMedicalMetrics.OverallMedicalQuality:F1}/100\n";
-            report += $"全图缺陷检测适用性: {result.FullImageDetectionMetrics.OverallSuitability:F1}/100 vs ROI: {result.ROIDetectionMetrics.OverallSuitability:F1}/100\n";
-            report += $"说明: 全图分析包含48.6%过曝区域，ROI分析更准确反映算法效果\n\n";
+            // 缺陷检测友好度指标
+            report += "【缺陷检测友好度】\n";
+            report += $"细线缺陷可见性提升: {result.FullImageDetectionMetrics.ThinLineVisibility:F1}% ({GetImprovementRating(result.FullImageDetectionMetrics.ThinLineVisibility)})\n";
+            report += $"背景噪声抑制效果: {result.FullImageDetectionMetrics.BackgroundNoiseReduction:F1}% ({GetScoreRating(result.FullImageDetectionMetrics.BackgroundNoiseReduction)})\n";
+            report += $"缺陷对比度提升: {result.FullImageDetectionMetrics.DefectBackgroundContrast:F2}x ({GetContrastRating(result.FullImageDetectionMetrics.DefectBackgroundContrast)})\n";
+            report += $"假阳性风险评估: {result.FullImageDetectionMetrics.FalsePositiveRisk:F1}% ({GetRiskRating(result.FullImageDetectionMetrics.FalsePositiveRisk)})\n";
+            report += $"缺陷检测适用性: {result.FullImageDetectionMetrics.OverallSuitability:F1}/100 ({GetScoreRating(result.FullImageDetectionMetrics.OverallSuitability)})\n\n";
 
             // 问题诊断
             if (result.DiagnosticResults?.Length > 0)
@@ -3533,18 +2967,12 @@ namespace ImageAnalysisTool.UI.Forms
                 }
             }
 
-            // ROI综合评分
-            report += "【ROI区域综合评分】\n";
-            report += $"技术指标评分: {result.ROITechnicalScore:F1}/100 ({GetScoreRating(result.ROITechnicalScore)})\n";
-            report += $"医学影像质量评分: {result.ROIMedicalScore:F1}/100 ({GetScoreRating(result.ROIMedicalScore)})\n";
-            report += $"缺陷检测适用性: {result.ROIDetectionScore:F1}/100 ({GetScoreRating(result.ROIDetectionScore)})\n";
-            report += $"综合推荐度: {result.ROIOverallRecommendation:F1}/100 ({GetRecommendationRating(result.ROIOverallRecommendation)})\n\n";
-
-            // 全图评分对比
-            report += "【全图评分对比】\n";
-            report += $"全图综合推荐度: {result.FullImageOverallRecommendation:F1}/100 ({GetRecommendationRating(result.FullImageOverallRecommendation)})\n";
-            report += $"ROI综合推荐度: {result.ROIOverallRecommendation:F1}/100 ({GetRecommendationRating(result.ROIOverallRecommendation)})\n";
-            report += $"✓ 建议以ROI评分为准，更准确反映算法在关注区域的效果\n";
+            // 综合评分
+            report += "【全图综合评分】\n";
+            report += $"技术指标评分: {result.FullImageTechnicalScore:F1}/100 ({GetScoreRating(result.FullImageTechnicalScore)})\n";
+            report += $"医学影像质量评分: {result.FullImageMedicalScore:F1}/100 ({GetScoreRating(result.FullImageMedicalScore)})\n";
+            report += $"缺陷检测适用性: {result.FullImageDetectionScore:F1}/100 ({GetScoreRating(result.FullImageDetectionScore)})\n";
+            report += $"综合推荐度: {result.FullImageOverallRecommendation:F1}/100 ({GetRecommendationRating(result.FullImageOverallRecommendation)})\n\n";
 
             return report;
         }
@@ -3793,49 +3221,40 @@ namespace ImageAnalysisTool.UI.Forms
         private ComparisonAnalysisResult CompareTwoEnhanced(Mat enhanced1, Mat enhanced2)
         {
             var config = AnalysisConfiguration.Default;
-            Mat roiMask = CreateROIMask(originalImage);
 
             // 分析增强图1
             enhanced1AnalysisResult = new ComprehensiveAnalysisResult
             {
-                ROIQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced1, config, roiMask),
-                ROIMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced1, config, roiMask),
-                ROIDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(originalImage, enhanced1, config, roiMask),
-                FullImageQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced1, config, null),
-                FullImageMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced1, config, null),
-                FullImageDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(originalImage, enhanced1, config, null)
+                FullImageQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced1, config),
+                FullImageMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced1, config),
+                FullImageDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(originalImage, enhanced1, config)
             };
 
             // 分析增强图2
             enhanced2AnalysisResult = new ComprehensiveAnalysisResult
             {
-                ROIQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced2, config, roiMask),
-                ROIMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced2, config, roiMask),
-                ROIDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(originalImage, enhanced2, config, roiMask),
-                FullImageQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced2, config, null),
-                FullImageMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced2, config, null),
-                FullImageDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(originalImage, enhanced2, config, null)
+                FullImageQualityMetrics = ImageQualityAnalyzer.AnalyzeQuality(originalImage, enhanced2, config),
+                FullImageMedicalMetrics = MedicalImageAnalyzer.AnalyzeMedicalImage(originalImage, enhanced2, config),
+                FullImageDetectionMetrics = DefectDetectionAnalyzer.AnalyzeDetectionFriendliness(originalImage, enhanced2, config)
             };
 
             // 计算综合评分
             var result1 = enhanced1AnalysisResult.Value;
-            result1.ROITechnicalScore = CalculateImageQualityScore(result1.ROIQualityMetrics);
-            result1.ROIMedicalScore = double.IsNaN(result1.ROIMedicalMetrics.OverallMedicalQuality) ? 0 : result1.ROIMedicalMetrics.OverallMedicalQuality;
-            result1.ROIDetectionScore = double.IsNaN(result1.ROIDetectionMetrics.OverallSuitability) ? 0 : result1.ROIDetectionMetrics.OverallSuitability;
-            result1.ROIOverallRecommendation = (result1.ROITechnicalScore + result1.ROIMedicalScore + result1.ROIDetectionScore) / 3.0;
+            result1.FullImageTechnicalScore = CalculateImageQualityScore(result1.FullImageQualityMetrics);
+            result1.FullImageMedicalScore = double.IsNaN(result1.FullImageMedicalMetrics.OverallMedicalQuality) ? 0 : result1.FullImageMedicalMetrics.OverallMedicalQuality;
+            result1.FullImageDetectionScore = double.IsNaN(result1.FullImageDetectionMetrics.OverallSuitability) ? 0 : result1.FullImageDetectionMetrics.OverallSuitability;
+            result1.FullImageOverallRecommendation = (result1.FullImageTechnicalScore + result1.FullImageMedicalScore + result1.FullImageDetectionScore) / 3.0;
             enhanced1AnalysisResult = result1;
 
             var result2 = enhanced2AnalysisResult.Value;
-            result2.ROITechnicalScore = CalculateImageQualityScore(result2.ROIQualityMetrics);
-            result2.ROIMedicalScore = double.IsNaN(result2.ROIMedicalMetrics.OverallMedicalQuality) ? 0 : result2.ROIMedicalMetrics.OverallMedicalQuality;
-            result2.ROIDetectionScore = double.IsNaN(result2.ROIDetectionMetrics.OverallSuitability) ? 0 : result2.ROIDetectionMetrics.OverallSuitability;
-            result2.ROIOverallRecommendation = (result2.ROITechnicalScore + result2.ROIMedicalScore + result2.ROIDetectionScore) / 3.0;
+            result2.FullImageTechnicalScore = CalculateImageQualityScore(result2.FullImageQualityMetrics);
+            result2.FullImageMedicalScore = double.IsNaN(result2.FullImageMedicalMetrics.OverallMedicalQuality) ? 0 : result2.FullImageMedicalMetrics.OverallMedicalQuality;
+            result2.FullImageDetectionScore = double.IsNaN(result2.FullImageDetectionMetrics.OverallSuitability) ? 0 : result2.FullImageDetectionMetrics.OverallSuitability;
+            result2.FullImageOverallRecommendation = (result2.FullImageTechnicalScore + result2.FullImageMedicalScore + result2.FullImageDetectionScore) / 3.0;
             enhanced2AnalysisResult = result2;
 
             // 生成对比总结
             var summary = GenerateComparisonSummary(result1, result2);
-
-            roiMask?.Dispose();
 
             return new ComparisonAnalysisResult
             {
@@ -3853,10 +3272,10 @@ namespace ImageAnalysisTool.UI.Forms
             var summary = new ComparisonSummary();
 
             // 计算各项差异
-            summary.QualityDifference = result2.ROITechnicalScore - result1.ROITechnicalScore;
-            summary.MedicalDifference = result2.ROIMedicalScore - result1.ROIMedicalScore;
-            summary.DetectionDifference = result2.ROIDetectionScore - result1.ROIDetectionScore;
-            summary.OverallDifference = result2.ROIOverallRecommendation - result1.ROIOverallRecommendation;
+            summary.QualityDifference = result2.FullImageTechnicalScore - result1.FullImageTechnicalScore;
+            summary.MedicalDifference = result2.FullImageMedicalScore - result1.FullImageMedicalScore;
+            summary.DetectionDifference = result2.FullImageDetectionScore - result1.FullImageDetectionScore;
+            summary.OverallDifference = result2.FullImageOverallRecommendation - result1.FullImageOverallRecommendation;
 
             // 确定推荐图像
             if (Math.Abs(summary.OverallDifference) < 2.0)
@@ -3885,11 +3304,11 @@ namespace ImageAnalysisTool.UI.Forms
         {
             var reasons = new List<string>();
 
-            if (better.ROITechnicalScore - worse.ROITechnicalScore > 5)
+            if (better.FullImageTechnicalScore - worse.FullImageTechnicalScore > 5)
                 reasons.Add("技术指标更优");
-            if (better.ROIMedicalScore - worse.ROIMedicalScore > 5)
+            if (better.FullImageMedicalScore - worse.FullImageMedicalScore > 5)
                 reasons.Add("医学影像质量更佳");
-            if (better.ROIDetectionScore - worse.ROIDetectionScore > 5)
+            if (better.FullImageDetectionScore - worse.FullImageDetectionScore > 5)
                 reasons.Add("缺陷检测适用性更强");
 
             if (reasons.Count == 0)
@@ -3933,17 +3352,17 @@ namespace ImageAnalysisTool.UI.Forms
 
             // 显示增强图1结果
             sb.AppendLine("【增强图1分析结果】");
-            sb.AppendLine($"技术指标评分: {comparisonResult.Enhanced1Result.ROITechnicalScore:F1}");
-            sb.AppendLine($"医学影像评分: {comparisonResult.Enhanced1Result.ROIMedicalScore:F1}");
-            sb.AppendLine($"缺陷检测评分: {comparisonResult.Enhanced1Result.ROIDetectionScore:F1}");
-            sb.AppendLine($"综合推荐度: {comparisonResult.Enhanced1Result.ROIOverallRecommendation:F1}\n");
+            sb.AppendLine($"技术指标评分: {comparisonResult.Enhanced1Result.FullImageTechnicalScore:F1}");
+            sb.AppendLine($"医学影像评分: {comparisonResult.Enhanced1Result.FullImageMedicalScore:F1}");
+            sb.AppendLine($"缺陷检测评分: {comparisonResult.Enhanced1Result.FullImageDetectionScore:F1}");
+            sb.AppendLine($"综合推荐度: {comparisonResult.Enhanced1Result.FullImageOverallRecommendation:F1}\n");
 
             // 显示增强图2结果
             sb.AppendLine("【增强图2分析结果】");
-            sb.AppendLine($"技术指标评分: {comparisonResult.Enhanced2Result.ROITechnicalScore:F1}");
-            sb.AppendLine($"医学影像评分: {comparisonResult.Enhanced2Result.ROIMedicalScore:F1}");
-            sb.AppendLine($"缺陷检测评分: {comparisonResult.Enhanced2Result.ROIDetectionScore:F1}");
-            sb.AppendLine($"综合推荐度: {comparisonResult.Enhanced2Result.ROIOverallRecommendation:F1}\n");
+            sb.AppendLine($"技术指标评分: {comparisonResult.Enhanced2Result.FullImageTechnicalScore:F1}");
+            sb.AppendLine($"医学影像评分: {comparisonResult.Enhanced2Result.FullImageMedicalScore:F1}");
+            sb.AppendLine($"缺陷检测评分: {comparisonResult.Enhanced2Result.FullImageDetectionScore:F1}");
+            sb.AppendLine($"综合推荐度: {comparisonResult.Enhanced2Result.FullImageOverallRecommendation:F1}\n");
 
             // 显示对比总结
             sb.AppendLine("【对比总结】");
@@ -4117,7 +3536,7 @@ namespace ImageAnalysisTool.UI.Forms
 
             sb.AppendLine("=== 三图综合增强算法对比分析 ===");
             sb.AppendLine($"分析时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-            sb.AppendLine($"分析模式: {(roiMappingRadio?.Checked == true ? "ROI区域分析" : "全图分析")}");
+            sb.AppendLine($"分析模式: 全图分析");
             sb.AppendLine();
 
             // 图像基本信息
@@ -4191,7 +3610,7 @@ namespace ImageAnalysisTool.UI.Forms
 
             sb.AppendLine($"=== {algorithmName}深度分析 ===");
             sb.AppendLine($"分析时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-            sb.AppendLine($"分析模式: {(roiMappingRadio?.Checked == true ? "ROI区域分析" : "全图分析")}");
+            sb.AppendLine($"分析模式: 全图分析");
             sb.AppendLine();
 
             if (originalImg == null || enhancedImg == null)
@@ -4204,7 +3623,7 @@ namespace ImageAnalysisTool.UI.Forms
             sb.AppendLine("【质量指标评估】");
             if (analysisResult.HasValue)
             {
-                var metrics = roiMappingRadio?.Checked == true ? analysisResult.Value.ROIQualityMetrics : analysisResult.Value.FullImageQualityMetrics;
+                var metrics = analysisResult.Value.FullImageQualityMetrics;
                 sb.AppendLine($"PSNR (峰值信噪比): {metrics.PSNR:F2} dB");
                 sb.AppendLine($"SSIM (结构相似性): {metrics.SSIM:F3}");
                 sb.AppendLine($"边缘质量评分: {metrics.EdgeQuality:F1}/100");
@@ -4221,7 +3640,7 @@ namespace ImageAnalysisTool.UI.Forms
             sb.AppendLine("【缺陷检测友好度】");
             if (analysisResult.HasValue)
             {
-                var detectionMetrics = roiMappingRadio?.Checked == true ? analysisResult.Value.ROIDetectionMetrics : analysisResult.Value.FullImageDetectionMetrics;
+                var detectionMetrics = analysisResult.Value.FullImageDetectionMetrics;
                 sb.AppendLine($"细线可见性提升: {detectionMetrics.ThinLineVisibility:F1}%");
                 sb.AppendLine($"背景噪声抑制: {detectionMetrics.BackgroundNoiseReduction:F1}/100");
                 sb.AppendLine($"缺陷对比度增强: {detectionMetrics.DefectBackgroundContrast:F1}/100");
@@ -4264,7 +3683,7 @@ namespace ImageAnalysisTool.UI.Forms
             sb.AppendLine("【专项优化建议】");
             if (analysisResult.HasValue)
             {
-                var score = roiMappingRadio?.Checked == true ? analysisResult.Value.ROIOverallRecommendation : analysisResult.Value.FullImageOverallRecommendation;
+                var score = analysisResult.Value.FullImageOverallRecommendation;
 
                 // 检查并处理NaN值
                 if (double.IsNaN(score) || double.IsInfinity(score))
@@ -4477,23 +3896,23 @@ namespace ImageAnalysisTool.UI.Forms
             }
             sb.AppendLine();
 
-            // 2. ROI灰度值分析
-            sb.AppendLine("【二、ROI灰度值分析】");
+            // 2. 灰度值分析
+            sb.AppendLine("【二、灰度值分析】");
             if (originalGrayValueAnalysisTextBox?.Text != null)
             {
-                sb.AppendLine("原图ROI分析:");
+                sb.AppendLine("原图分析:");
                 sb.AppendLine(originalGrayValueAnalysisTextBox.Text);
                 sb.AppendLine();
             }
             if (enhanced1GrayValueAnalysisTextBox?.Text != null)
             {
-                sb.AppendLine("增强图1 ROI分析:");
+                sb.AppendLine("增强图1分析:");
                 sb.AppendLine(enhanced1GrayValueAnalysisTextBox.Text);
                 sb.AppendLine();
             }
             if (enhanced2GrayValueAnalysisTextBox?.Text != null)
             {
-                sb.AppendLine("增强图2 ROI分析:");
+                sb.AppendLine("增强图2分析:");
                 sb.AppendLine(enhanced2GrayValueAnalysisTextBox.Text);
                 sb.AppendLine();
             }
@@ -4544,11 +3963,7 @@ namespace ImageAnalysisTool.UI.Forms
             }
 
             // 添加分析模式信息
-            var currentMode = roiMappingRadio?.Checked == true ? "ROI区域分析" : "全图分析";
-            sb.AppendLine($"当前分析模式: {currentMode}");
-
-            var roiMode = roiModeComboBox?.SelectedItem?.ToString() ?? "未知";
-            sb.AppendLine($"ROI检测模式: {roiMode}");
+            sb.AppendLine("当前分析模式: 全图分析");
             sb.AppendLine();
 
             // 报告尾部

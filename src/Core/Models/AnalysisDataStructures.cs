@@ -173,32 +173,17 @@ namespace ImageAnalysisTool.Core.Models
     public struct ComprehensiveAnalysisResult
     {
         /// <summary>
-        /// ROI区域图像质量指标
-        /// </summary>
-        public ImageQualityMetrics ROIQualityMetrics { get; set; }
-
-        /// <summary>
-        /// ROI区域医学影像专用指标
-        /// </summary>
-        public MedicalImageMetrics ROIMedicalMetrics { get; set; }
-
-        /// <summary>
-        /// ROI区域缺陷检测友好度指标
-        /// </summary>
-        public DefectDetectionMetrics ROIDetectionMetrics { get; set; }
-
-        /// <summary>
-        /// 全图图像质量指标（用于对比）
+        /// 全图图像质量指标
         /// </summary>
         public ImageQualityMetrics FullImageQualityMetrics { get; set; }
 
         /// <summary>
-        /// 全图医学影像专用指标（用于对比）
+        /// 全图医学影像专用指标
         /// </summary>
         public MedicalImageMetrics FullImageMedicalMetrics { get; set; }
 
         /// <summary>
-        /// 全图缺陷检测友好度指标（用于对比）
+        /// 全图缺陷检测友好度指标
         /// </summary>
         public DefectDetectionMetrics FullImageDetectionMetrics { get; set; }
 
@@ -211,26 +196,6 @@ namespace ImageAnalysisTool.Core.Models
         /// 参数优化建议列表
         /// </summary>
         public ParameterOptimizationSuggestion[] OptimizationSuggestions { get; set; }
-
-        /// <summary>
-        /// ROI技术指标综合评分 (0-100)
-        /// </summary>
-        public double ROITechnicalScore { get; set; }
-
-        /// <summary>
-        /// ROI医学影像质量综合评分 (0-100)
-        /// </summary>
-        public double ROIMedicalScore { get; set; }
-
-        /// <summary>
-        /// ROI缺陷检测适用性评分 (0-100)
-        /// </summary>
-        public double ROIDetectionScore { get; set; }
-
-        /// <summary>
-        /// ROI综合推荐度评分 (0-100)
-        /// </summary>
-        public double ROIOverallRecommendation { get; set; }
 
         /// <summary>
         /// 全图技术指标综合评分 (0-100)

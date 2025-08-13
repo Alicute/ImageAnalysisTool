@@ -15,54 +15,42 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <param name="original">原始图像</param>
         /// <param name="enhanced">增强后图像</param>
         /// <param name="config">分析配置</param>
-        /// <param name="roiMask">ROI区域掩码，如果为null则分析全图</param>
         /// <returns>图像质量指标</returns>
-        public static ImageQualityMetrics AnalyzeQuality(Mat original, Mat enhanced, AnalysisConfiguration config, Mat roiMask = null)
+        public static ImageQualityMetrics AnalyzeQuality(Mat original, Mat enhanced, AnalysisConfiguration config)
         {
             var metrics = new ImageQualityMetrics();
 
             try
             {
-                // 如果提供了ROI掩码，只分析ROI区域
-                Mat originalRegion = roiMask != null ? ApplyMask(original, roiMask) : original;
-                Mat enhancedRegion = roiMask != null ? ApplyMask(enhanced, roiMask) : enhanced;
-
                 // 1. 计算PSNR (峰值信噪比)
-                metrics.PSNR = CalculatePSNR(originalRegion, enhancedRegion, roiMask);
+                metrics.PSNR = CalculatePSNR(original, enhanced);
 
                 // 2. 计算SSIM (结构相似性) - 可选
                 if (config.EnableSSIM)
                 {
-                    metrics.SSIM = CalculateSSIM(originalRegion, enhancedRegion, roiMask);
+                    metrics.SSIM = CalculateSSIM(original, enhanced);
                 }
 
                 // 3. 检测过度增强
-                metrics.OverEnhancementScore = DetectOverEnhancement(enhancedRegion, roiMask);
+                metrics.OverEnhancementScore = DetectOverEnhancement(enhanced);
 
                 // 4. 检测噪声放大
                 if (config.EnableNoiseAnalysis)
                 {
-                    metrics.NoiseAmplification = DetectNoiseAmplification(originalRegion, enhancedRegion, roiMask);
+                    metrics.NoiseAmplification = DetectNoiseAmplification(original, enhanced);
                 }
 
                 // 5. 分析边缘质量
                 if (config.EnableDetailedEdgeAnalysis)
                 {
-                    metrics.EdgeQuality = AnalyzeEdgeQuality(enhancedRegion, roiMask);
-                    metrics.HaloEffect = DetectHaloEffect(enhancedRegion, roiMask);
+                    metrics.EdgeQuality = AnalyzeEdgeQuality(enhanced);
+                    metrics.HaloEffect = DetectHaloEffect(enhanced);
                 }
 
                 // 6. 计算VIF (视觉信息保真度) - 可选，计算量大
                 if (config.EnableVIF)
                 {
-                    metrics.VIF = CalculateVIF(originalRegion, enhancedRegion, roiMask);
-                }
-
-                // 清理临时图像
-                if (roiMask != null)
-                {
-                    originalRegion?.Dispose();
-                    enhancedRegion?.Dispose();
+                    metrics.VIF = CalculateVIF(original, enhanced);
                 }
             }
             catch (Exception ex)
@@ -73,22 +61,12 @@ namespace ImageAnalysisTool.Core.Analyzers
             return metrics;
         }
 
-        /// <summary>
-        /// 应用掩码到图像
-        /// </summary>
-        private static Mat ApplyMask(Mat image, Mat mask)
-        {
-            if (mask == null) return image;
-
-            Mat result = new Mat();
-            image.CopyTo(result, mask);
-            return result;
-        }
+        
 
         /// <summary>
         /// 计算峰值信噪比 (PSNR)
         /// </summary>
-        private static double CalculatePSNR(Mat original, Mat enhanced, Mat mask = null)
+        private static double CalculatePSNR(Mat original, Mat enhanced)
         {
             try
             {
@@ -104,8 +82,8 @@ namespace ImageAnalysisTool.Core.Analyzers
                 Mat squared = new Mat();
                 Cv2.Multiply(diffDouble, diffDouble, squared);
 
-                // 计算均值（如果有掩码则只计算掩码区域）
-                Scalar mse = mask != null ? Cv2.Mean(squared, mask) : Cv2.Mean(squared);
+                // 计算均值
+                Scalar mse = Cv2.Mean(squared);
 
                 // 清理资源
                 diff.Dispose();
@@ -113,23 +91,27 @@ namespace ImageAnalysisTool.Core.Analyzers
                 squared.Dispose();
 
                 // 计算PSNR
-                if (mse.Val0 == 0) return double.PositiveInfinity; // 完全相同
+                if (mse.Val0 <= 0.001) return 100; // 几乎完全相同，返回最高分
 
                 double maxPixelValue = 65535.0; // 16位图像的最大值
                 double psnr = 20 * Math.Log10(maxPixelValue / Math.Sqrt(mse.Val0));
 
-                return Math.Max(0, Math.Min(100, psnr)); // 限制在合理范围内
+                // PSNR通常在10-50dB范围内，转换为0-100分
+                double normalizedPsnr = Math.Max(0, Math.Min(100, (psnr - 10) * 2)); // 10dB=0分, 60dB=100分
+
+                return normalizedPsnr;
             }
-            catch
+            catch (Exception ex)
             {
-                return 0;
+                Console.WriteLine($"PSNR计算失败: {ex.Message}");
+                return 50; // 返回中性评分
             }
         }
 
         /// <summary>
         /// 计算结构相似性指数 (SSIM) - 简化版本
         /// </summary>
-        private static double CalculateSSIM(Mat original, Mat enhanced, Mat mask = null)
+        private static double CalculateSSIM(Mat original, Mat enhanced)
         {
             try
             {
@@ -197,18 +179,27 @@ namespace ImageAnalysisTool.Core.Analyzers
                 denominator1.Dispose(); denominator2.Dispose();
                 ssimMap.Dispose(); num.Dispose(); den.Dispose();
 
-                return Math.Max(0, Math.Min(1, meanSSIM.Val0));
+                double ssimValue = meanSSIM.Val0;
+
+                // 检查NaN和无穷大
+                if (double.IsNaN(ssimValue) || double.IsInfinity(ssimValue))
+                {
+                    return 0.5; // 返回中性值
+                }
+
+                return Math.Max(0, Math.Min(1, ssimValue));
             }
-            catch
+            catch (Exception ex)
             {
-                return 0;
+                Console.WriteLine($"SSIM计算失败: {ex.Message}");
+                return 0.5; // 返回中性值
             }
         }
 
         /// <summary>
         /// 检测过度增强
         /// </summary>
-        private static double DetectOverEnhancement(Mat enhanced, Mat mask = null)
+        private static double DetectOverEnhancement(Mat enhanced)
         {
             try
             {
@@ -248,7 +239,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 检测噪声放大
         /// </summary>
-        private static double DetectNoiseAmplification(Mat original, Mat enhanced, Mat mask = null)
+        private static double DetectNoiseAmplification(Mat original, Mat enhanced)
         {
             try
             {
@@ -283,7 +274,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 分析边缘质量
         /// </summary>
-        private static double AnalyzeEdgeQuality(Mat enhanced, Mat mask = null)
+        private static double AnalyzeEdgeQuality(Mat enhanced)
         {
             try
             {
@@ -306,16 +297,17 @@ namespace ImageAnalysisTool.Core.Analyzers
                 int connectedEdgePixels = Cv2.CountNonZero(dilated);
                 double continuity = (double)connectedEdgePixels / Math.Max(edgePixels, 1);
 
-                // 综合评分
-                double qualityScore = (edgeDensity * 50 + continuity * 50);
+                // 综合评分 (0-100分)
+                double qualityScore = (edgeDensity * 500 + continuity * 50); // 调整权重，避免过度放大
 
                 // 清理资源
                 edges.Dispose(); enhanced8bit.Dispose(); kernel.Dispose(); dilated.Dispose();
 
-                return Math.Max(0, Math.Min(100, qualityScore * 100));
+                return Math.Max(0, Math.Min(100, qualityScore));
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine($"边缘质量分析失败: {ex.Message}");
                 return 50; // 默认中等质量
             }
         }
@@ -323,7 +315,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 检测光晕效应
         /// </summary>
-        private static double DetectHaloEffect(Mat enhanced, Mat mask = null)
+        private static double DetectHaloEffect(Mat enhanced)
         {
             try
             {
@@ -361,7 +353,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 计算视觉信息保真度 (VIF) - 简化版本
         /// </summary>
-        private static double CalculateVIF(Mat original, Mat enhanced, Mat mask = null)
+        private static double CalculateVIF(Mat original, Mat enhanced)
         {
             try
             {

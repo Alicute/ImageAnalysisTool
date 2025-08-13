@@ -15,42 +15,30 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <param name="original">原始图像</param>
         /// <param name="enhanced">增强后图像</param>
         /// <param name="config">分析配置</param>
-        /// <param name="roiMask">ROI区域掩码，如果为null则分析全图</param>
         /// <returns>医学影像专用指标</returns>
-        public static MedicalImageMetrics AnalyzeMedicalImage(Mat original, Mat enhanced, AnalysisConfiguration config, Mat roiMask = null)
+        public static MedicalImageMetrics AnalyzeMedicalImage(Mat original, Mat enhanced, AnalysisConfiguration config)
         {
             var metrics = new MedicalImageMetrics();
 
             try
             {
-                // 如果提供了ROI掩码，只分析ROI区域
-                Mat originalRegion = roiMask != null ? ApplyMask(original, roiMask) : original;
-                Mat enhancedRegion = roiMask != null ? ApplyMask(enhanced, roiMask) : enhanced;
-
                 // 1. 分析信息保持度
-                metrics.InformationPreservation = AnalyzeInformationPreservation(originalRegion, enhancedRegion, roiMask);
+                metrics.InformationPreservation = AnalyzeInformationPreservation(original, enhanced);
 
                 // 2. 分析动态范围利用率
-                metrics.DynamicRangeUtilization = AnalyzeDynamicRangeUtilization(enhancedRegion, roiMask);
+                metrics.DynamicRangeUtilization = AnalyzeDynamicRangeUtilization(enhanced);
 
                 // 3. 分析局部对比度增强效果
-                metrics.LocalContrastEnhancement = AnalyzeLocalContrastEnhancement(originalRegion, enhancedRegion, roiMask);
+                metrics.LocalContrastEnhancement = AnalyzeLocalContrastEnhancement(original, enhanced);
 
                 // 4. 分析细节保真度
-                metrics.DetailFidelity = AnalyzeDetailFidelity(originalRegion, enhancedRegion, roiMask);
+                metrics.DetailFidelity = AnalyzeDetailFidelity(original, enhanced);
 
                 // 5. 分析窗宽窗位适应性
-                metrics.WindowLevelAdaptability = AnalyzeWindowLevelAdaptability(originalRegion, enhancedRegion, roiMask);
+                metrics.WindowLevelAdaptability = AnalyzeWindowLevelAdaptability(original, enhanced);
 
                 // 6. 计算综合医学影像质量评分
                 metrics.OverallMedicalQuality = CalculateOverallMedicalQuality(metrics);
-
-                // 清理临时图像
-                if (roiMask != null)
-                {
-                    originalRegion?.Dispose();
-                    enhancedRegion?.Dispose();
-                }
             }
             catch (Exception ex)
             {
@@ -60,22 +48,12 @@ namespace ImageAnalysisTool.Core.Analyzers
             return metrics;
         }
 
-        /// <summary>
-        /// 应用掩码到图像
-        /// </summary>
-        private static Mat ApplyMask(Mat image, Mat mask)
-        {
-            if (mask == null) return image;
-
-            Mat result = new Mat();
-            image.CopyTo(result, mask);
-            return result;
-        }
+        
 
         /// <summary>
         /// 分析信息保持度 - 通过互信息和梯度相关性评估
         /// </summary>
-        private static double AnalyzeInformationPreservation(Mat original, Mat enhanced, Mat roiMask)
+        private static double AnalyzeInformationPreservation(Mat original, Mat enhanced)
         {
             try
             {
@@ -116,8 +94,8 @@ namespace ImageAnalysisTool.Core.Analyzers
                 Cv2.Magnitude(gradX2, gradY2, gradMag2);
 
                 // 计算相关系数
-                Scalar mean1 = Cv2.Mean(gradMag1, roiMask);
-                Scalar mean2 = Cv2.Mean(gradMag2, roiMask);
+                Scalar mean1 = Cv2.Mean(gradMag1);
+                Scalar mean2 = Cv2.Mean(gradMag2);
                 
                 Mat diff1 = new Mat(), diff2 = new Mat();
                 Cv2.Subtract(gradMag1, mean1, diff1);
@@ -150,7 +128,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 分析动态范围利用率 - 评估灰度范围的充分利用程度
         /// </summary>
-        private static double AnalyzeDynamicRangeUtilization(Mat enhanced, Mat roiMask)
+        private static double AnalyzeDynamicRangeUtilization(Mat enhanced)
         {
             try
             {
@@ -170,7 +148,7 @@ namespace ImageAnalysisTool.Core.Analyzers
                     enhanced8bit = enhanced.Clone();
                 }
                 
-                Cv2.CalcHist(new Mat[] { enhanced8bit }, new int[] { 0 }, roiMask, hist, 1, histSize, ranges);
+                Cv2.CalcHist(new Mat[] { enhanced8bit }, new int[] { 0 }, null, hist, 1, histSize, ranges);
 
                 // 计算有效灰度级数量
                 int usedLevels = 0;
@@ -212,7 +190,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 分析局部对比度增强效果
         /// </summary>
-        private static double AnalyzeLocalContrastEnhancement(Mat original, Mat enhanced, Mat roiMask)
+        private static double AnalyzeLocalContrastEnhancement(Mat original, Mat enhanced)
         {
             try
             {
@@ -246,9 +224,16 @@ namespace ImageAnalysisTool.Core.Analyzers
                 Cv2.Sqrt(enhancedVar, enhancedStd);
 
                 // 计算对比度提升比例
-                Scalar originalMeanStd = Cv2.Mean(originalStd, roiMask);
-                Scalar enhancedMeanStd = Cv2.Mean(enhancedStd, roiMask);
-                
+                Scalar originalMeanStd = Cv2.Mean(originalStd);
+                Scalar enhancedMeanStd = Cv2.Mean(enhancedStd);
+
+                // 增强NaN检测和处理
+                if (double.IsNaN(originalMeanStd.Val0) || double.IsNaN(enhancedMeanStd.Val0) ||
+                    originalMeanStd.Val0 <= 0 || enhancedMeanStd.Val0 <= 0)
+                {
+                    return 50; // 返回中性评分
+                }
+
                 double improvement = enhancedMeanStd.Val0 / Math.Max(originalMeanStd.Val0, 1.0);
                 
                 // 清理资源
@@ -261,6 +246,13 @@ namespace ImageAnalysisTool.Core.Analyzers
 
                 // 转换为0-100分数，理想提升为1.5-3倍
                 double score = Math.Min(100, Math.Max(0, (improvement - 1.0) * 50));
+
+                // 最终NaN检查
+                if (double.IsNaN(score) || double.IsInfinity(score))
+                {
+                    return 50; // 返回中性评分
+                }
+
                 return score;
             }
             catch
@@ -272,7 +264,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 分析细节保真度 - 通过高频信息保持度评估
         /// </summary>
-        private static double AnalyzeDetailFidelity(Mat original, Mat enhanced, Mat roiMask)
+        private static double AnalyzeDetailFidelity(Mat original, Mat enhanced)
         {
             try
             {
@@ -287,8 +279,8 @@ namespace ImageAnalysisTool.Core.Analyzers
                 Cv2.Laplacian(enhancedFloat, enhancedLaplacian, MatType.CV_32F);
 
                 // 计算细节信息的相关性
-                Scalar originalMean = Cv2.Mean(originalLaplacian, roiMask);
-                Scalar enhancedMean = Cv2.Mean(enhancedLaplacian, roiMask);
+                Scalar originalMean = Cv2.Mean(originalLaplacian);
+                Scalar enhancedMean = Cv2.Mean(enhancedLaplacian);
                 
                 Mat originalCentered = new Mat(), enhancedCentered = new Mat();
                 Cv2.Subtract(originalLaplacian, originalMean, originalCentered);
@@ -321,7 +313,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 分析窗宽窗位适应性 - 模拟不同窗宽窗位下的表现稳定性
         /// </summary>
-        private static double AnalyzeWindowLevelAdaptability(Mat original, Mat enhanced, Mat roiMask)
+        private static double AnalyzeWindowLevelAdaptability(Mat original, Mat enhanced)
         {
             try
             {
@@ -343,8 +335,8 @@ namespace ImageAnalysisTool.Core.Analyzers
                             Mat windowedEnhanced = ApplyWindowLevel(enhanced, center, width);
                             
                             // 计算在此窗宽窗位下的对比度
-                            Scalar originalStd = CalculateStandardDeviation(windowedOriginal, roiMask);
-                            Scalar enhancedStd = CalculateStandardDeviation(windowedEnhanced, roiMask);
+                            Scalar originalStd = CalculateStandardDeviation(windowedOriginal);
+                            Scalar enhancedStd = CalculateStandardDeviation(windowedEnhanced);
                             
                             double contrastRatio = enhancedStd.Val0 / Math.Max(originalStd.Val0, 1.0);
                             totalScore += Math.Min(100, Math.Max(0, (contrastRatio - 1.0) * 50));
@@ -407,14 +399,14 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 计算标准差
         /// </summary>
-        private static Scalar CalculateStandardDeviation(Mat image, Mat mask)
+        private static Scalar CalculateStandardDeviation(Mat image)
         {
-            Scalar mean = Cv2.Mean(image, mask);
+            Scalar mean = Cv2.Mean(image);
             Mat diff = new Mat();
             Cv2.Subtract(image, mean, diff);
             Mat squared = new Mat();
             Cv2.Multiply(diff, diff, squared);
-            Scalar variance = Cv2.Mean(squared, mask);
+            Scalar variance = Cv2.Mean(squared);
             
             diff.Dispose();
             squared.Dispose();

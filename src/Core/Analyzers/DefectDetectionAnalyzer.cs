@@ -15,39 +15,27 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <param name="original">原始图像</param>
         /// <param name="enhanced">增强后图像</param>
         /// <param name="config">分析配置</param>
-        /// <param name="roiMask">ROI区域掩码，如果为null则分析全图</param>
         /// <returns>缺陷检测友好度指标</returns>
-        public static DefectDetectionMetrics AnalyzeDetectionFriendliness(Mat original, Mat enhanced, AnalysisConfiguration config, Mat roiMask = null)
+        public static DefectDetectionMetrics AnalyzeDetectionFriendliness(Mat original, Mat enhanced, AnalysisConfiguration config)
         {
             var metrics = new DefectDetectionMetrics();
 
             try
             {
-                // 如果提供了ROI掩码，只分析ROI区域
-                Mat originalRegion = roiMask != null ? ApplyMask(original, roiMask) : original;
-                Mat enhancedRegion = roiMask != null ? ApplyMask(enhanced, roiMask) : enhanced;
-
                 // 1. 分析细线缺陷可见性提升
-                metrics.ThinLineVisibility = AnalyzeThinLineVisibility(originalRegion, enhancedRegion, roiMask);
+                metrics.ThinLineVisibility = AnalyzeThinLineVisibility(original, enhanced);
 
                 // 2. 分析背景噪声抑制效果
-                metrics.BackgroundNoiseReduction = AnalyzeBackgroundNoiseReduction(originalRegion, enhancedRegion, roiMask);
+                metrics.BackgroundNoiseReduction = AnalyzeBackgroundNoiseReduction(original, enhanced);
 
                 // 3. 分析缺陷与背景对比度提升
-                metrics.DefectBackgroundContrast = AnalyzeDefectBackgroundContrast(originalRegion, enhancedRegion, roiMask);
+                metrics.DefectBackgroundContrast = AnalyzeDefectBackgroundContrast(original, enhanced);
 
                 // 4. 评估假阳性风险
-                metrics.FalsePositiveRisk = AnalyzeFalsePositiveRisk(enhancedRegion, roiMask);
+                metrics.FalsePositiveRisk = AnalyzeFalsePositiveRisk(enhanced);
 
                 // 5. 计算综合适用性评分
                 metrics.OverallSuitability = CalculateOverallSuitability(metrics);
-
-                // 清理临时图像
-                if (roiMask != null)
-                {
-                    originalRegion?.Dispose();
-                    enhancedRegion?.Dispose();
-                }
             }
             catch (Exception ex)
             {
@@ -57,22 +45,12 @@ namespace ImageAnalysisTool.Core.Analyzers
             return metrics;
         }
 
-        /// <summary>
-        /// 应用掩码到图像
-        /// </summary>
-        private static Mat ApplyMask(Mat image, Mat mask)
-        {
-            if (mask == null) return image;
-
-            Mat result = new Mat();
-            image.CopyTo(result, mask);
-            return result;
-        }
+        
 
         /// <summary>
         /// 分析细线缺陷可见性提升
         /// </summary>
-        private static double AnalyzeThinLineVisibility(Mat original, Mat enhanced, Mat mask = null)
+        private static double AnalyzeThinLineVisibility(Mat original, Mat enhanced)
         {
             try
             {
@@ -98,7 +76,7 @@ namespace ImageAnalysisTool.Core.Analyzers
                 originalLines.Dispose();
                 enhancedLines.Dispose();
 
-                return Math.Max(-100, Math.Min(500, overallImprovement)); // 允许负值表示恶化
+                return Math.Max(0, Math.Min(100, overallImprovement + 50)); // 转换为0-100分，50为基准
             }
             catch
             {
@@ -183,19 +161,31 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 分析背景噪声抑制效果
         /// </summary>
-        private static double AnalyzeBackgroundNoiseReduction(Mat original, Mat enhanced, Mat mask = null)
+        private static double AnalyzeBackgroundNoiseReduction(Mat original, Mat enhanced)
         {
             try
             {
-                // 使用ROI掩码分离背景区域
+                // 创建背景区域掩码
                 Mat backgroundMask = CreateBackgroundMask(original);
+
+                // 检查背景掩码是否有效
+                int backgroundPixels = Cv2.CountNonZero(backgroundMask);
+                if (backgroundPixels < 100) // 如果背景区域太小，使用简化计算
+                {
+                    backgroundMask.Dispose();
+                    return CalculateSimpleNoiseReduction(original, enhanced);
+                }
 
                 // 计算背景区域的噪声水平
                 double originalNoise = CalculateNoiseLevel(original, backgroundMask);
                 double enhancedNoise = CalculateNoiseLevel(enhanced, backgroundMask);
 
                 // 计算噪声抑制效果
-                double noiseReduction = (1.0 - enhancedNoise / Math.Max(originalNoise, 0.001)) * 100;
+                double noiseReduction = 0;
+                if (originalNoise > 0.001)
+                {
+                    noiseReduction = (1.0 - enhancedNoise / originalNoise) * 100;
+                }
 
                 backgroundMask.Dispose();
 
@@ -203,7 +193,39 @@ namespace ImageAnalysisTool.Core.Analyzers
             }
             catch
             {
-                return 0;
+                return CalculateSimpleNoiseReduction(original, enhanced);
+            }
+        }
+
+        /// <summary>
+        /// 简化的噪声抑制计算
+        /// </summary>
+        private static double CalculateSimpleNoiseReduction(Mat original, Mat enhanced)
+        {
+            try
+            {
+                // 使用拉普拉斯算子计算全图噪声水平
+                Mat originalLap = new Mat(), enhancedLap = new Mat();
+                Cv2.Laplacian(original, originalLap, MatType.CV_16S);
+                Cv2.Laplacian(enhanced, enhancedLap, MatType.CV_16S);
+
+                Scalar originalNoise = Cv2.Mean(Cv2.Abs(originalLap));
+                Scalar enhancedNoise = Cv2.Mean(Cv2.Abs(enhancedLap));
+
+                double noiseReduction = 0;
+                if (originalNoise.Val0 > 0.001)
+                {
+                    noiseReduction = (1.0 - enhancedNoise.Val0 / originalNoise.Val0) * 100;
+                }
+
+                originalLap.Dispose();
+                enhancedLap.Dispose();
+
+                return Math.Max(0, Math.Min(100, noiseReduction));
+            }
+            catch
+            {
+                return 25; // 返回中性评分
             }
         }
 
@@ -267,7 +289,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 分析缺陷与背景对比度提升
         /// </summary>
-        private static double AnalyzeDefectBackgroundContrast(Mat original, Mat enhanced, Mat mask = null)
+        private static double AnalyzeDefectBackgroundContrast(Mat original, Mat enhanced)
         {
             try
             {
@@ -332,7 +354,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         /// <summary>
         /// 分析假阳性风险
         /// </summary>
-        private static double AnalyzeFalsePositiveRisk(Mat enhanced, Mat mask = null)
+        private static double AnalyzeFalsePositiveRisk(Mat enhanced)
         {
             try
             {
@@ -395,7 +417,7 @@ namespace ImageAnalysisTool.Core.Analyzers
         private static double CalculateOverallSuitability(DefectDetectionMetrics metrics)
         {
             // 加权计算综合评分
-            double visibilityScore = Math.Max(0, Math.Min(100, metrics.ThinLineVisibility + 50)); // 转换为0-100分
+            double visibilityScore = Math.Max(0, Math.Min(100, metrics.ThinLineVisibility)); // 已经是0-100分
             double noiseScore = metrics.BackgroundNoiseReduction;
             double contrastScore = Math.Min(100, (metrics.DefectBackgroundContrast - 1.0) * 50 + 50); // 转换为0-100分
             double riskScore = 100 - metrics.FalsePositiveRisk; // 风险越低分数越高
