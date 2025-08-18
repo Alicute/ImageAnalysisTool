@@ -40,6 +40,14 @@ namespace ImageAnalysisTool.UI.Forms
         private string enhancedImageFileName = "";
         private string enhanced2ImageFileName = "";
 
+        // DICOM窗宽窗位信息存储（工业X射线图像优化）
+        private double originalWindowWidth = 32768.0;   // 适合16位工业图像
+        private double originalWindowLevel = 32768.0;   // 中间值
+        private double enhancedWindowWidth = 32768.0;
+        private double enhancedWindowLevel = 32768.0;
+        private double enhanced2WindowWidth = 32768.0;
+        private double enhanced2WindowLevel = 32768.0;
+
         // 灰度值分析结果
         private string originalGrayValueAnalysis = "";
         private string enhanced1GrayValueAnalysis = "";
@@ -54,9 +62,7 @@ namespace ImageAnalysisTool.UI.Forms
         private ComprehensiveAnalysisResult? enhanced1AnalysisResult;
                 private ComprehensiveAnalysisResult? enhanced2AnalysisResult;
 
-        // 修复 CS0103: 将局部变量提升为类成员
-        private Panel mappingModePanel;
-        private RadioButton fullImageMappingRadio;
+
 
         // UI控件
         private ScrollableControl mainScrollPanel;  // 主滚动面板
@@ -73,6 +79,7 @@ namespace ImageAnalysisTool.UI.Forms
         private Button compareBtn;
         private Button exportReportBtn;
         private Button imageProcessingBtn;  // 新增：图像处理按钮
+        private Button openLogsBtn;         // 新增：打开日志按钮
 
         // 新的列式布局控件
         private Panel originalColumnPanel;
@@ -102,6 +109,36 @@ namespace ImageAnalysisTool.UI.Forms
         private RichTextBox enhanced2AnalysisTextBox;
         private RichTextBox enhanced2GrayValueAnalysisTextBox;
         private RichTextBox enhanced2AISummaryTextBox;
+
+        // 窗宽窗位控制面板
+        private GroupBox originalWindowLevelPanel;
+        private TrackBar originalWindowWidthTrackBar;
+        private TrackBar originalWindowLevelTrackBar;
+        private Label originalWindowWidthLabel;
+        private Label originalWindowLevelLabel;
+        private Button originalResetWindowLevelBtn;
+        private Button originalInvertBtn;
+
+        private GroupBox enhanced1WindowLevelPanel;
+        private TrackBar enhanced1WindowWidthTrackBar;
+        private TrackBar enhanced1WindowLevelTrackBar;
+        private Label enhanced1WindowWidthLabel;
+        private Label enhanced1WindowLevelLabel;
+        private Button enhanced1ResetWindowLevelBtn;
+        private Button enhanced1InvertBtn;
+
+        private GroupBox enhanced2WindowLevelPanel;
+        private TrackBar enhanced2WindowWidthTrackBar;
+        private TrackBar enhanced2WindowLevelTrackBar;
+        private Label enhanced2WindowWidthLabel;
+        private Label enhanced2WindowLevelLabel;
+        private Button enhanced2ResetWindowLevelBtn;
+        private Button enhanced2InvertBtn;
+
+        // 反相状态
+        private bool originalInverted = false;
+        private bool enhanced1Inverted = false;
+        private bool enhanced2Inverted = false;
 
         // 保留旧的控件引用（兼容性）
         private Chart histogramChart;
@@ -253,13 +290,14 @@ namespace ImageAnalysisTool.UI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 7,  // 增加到7行
+                RowCount = 8,  // 增加到8行，添加窗宽窗位控制
                 AutoSize = true
             };
 
             // 设置行样式（使用绝对高度，让列变得更长）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));   // 标题
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 图像
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));  // 窗宽窗位控制（增加高度）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 直方图
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 像素映射
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 分析结果（增大）
@@ -283,6 +321,13 @@ namespace ImageAnalysisTool.UI.Forms
                 SizeMode = PictureBoxSizeMode.Zoom,
                 BorderStyle = BorderStyle.FixedSingle
             };
+
+            // 创建窗宽窗位控制面板
+            originalWindowLevelPanel = CreateWindowLevelPanel("原图窗宽窗位",
+                out originalWindowWidthTrackBar, out originalWindowLevelTrackBar,
+                out originalWindowWidthLabel, out originalWindowLevelLabel,
+                out originalResetWindowLevelBtn, out originalInvertBtn,
+                OnOriginalWindowLevelChanged, OnOriginalResetWindowLevel, OnOriginalInvertImage);
 
             // 创建直方图
             originalHistogramChart = CreateChart("原图直方图");
@@ -321,11 +366,12 @@ namespace ImageAnalysisTool.UI.Forms
             // 添加到列布局
             columnLayout.Controls.Add(originalLabel, 0, 0);
             columnLayout.Controls.Add(originalPictureBox, 0, 1);
-            columnLayout.Controls.Add(originalHistogramChart, 0, 2);
-            columnLayout.Controls.Add(originalPixelMappingChart, 0, 3);
-            columnLayout.Controls.Add(originalAnalysisTextBox, 0, 4);
-            columnLayout.Controls.Add(originalGrayValueAnalysisTextBox, 0, 5);
-            columnLayout.Controls.Add(originalAISummaryTextBox, 0, 6);
+            columnLayout.Controls.Add(originalWindowLevelPanel, 0, 2);  // 窗宽窗位控制
+            columnLayout.Controls.Add(originalHistogramChart, 0, 3);
+            columnLayout.Controls.Add(originalPixelMappingChart, 0, 4);
+            columnLayout.Controls.Add(originalAnalysisTextBox, 0, 5);
+            columnLayout.Controls.Add(originalGrayValueAnalysisTextBox, 0, 6);
+            columnLayout.Controls.Add(originalAISummaryTextBox, 0, 7);
 
             originalColumnPanel.Controls.Add(columnLayout);
 
@@ -350,17 +396,19 @@ namespace ImageAnalysisTool.UI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 7,  // 增加到7行
+                RowCount = 8,  // 增加到8行，添加窗宽窗位控制
                 AutoSize = true
             };
 
             // 设置行样式（使用绝对高度，让列变得更长）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));   // 标题
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 图像
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));  // 窗宽窗位控制（增加高度）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 直方图
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 像素映射
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 分析结果（增大）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 250F));  // 灰度值分析（增大）
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 智能分析总结（新增）
 
             // 创建标题标签
             enhancedLabel = new Label
@@ -379,6 +427,13 @@ namespace ImageAnalysisTool.UI.Forms
                 SizeMode = PictureBoxSizeMode.Zoom,
                 BorderStyle = BorderStyle.FixedSingle
             };
+
+            // 创建窗宽窗位控制面板
+            enhanced1WindowLevelPanel = CreateWindowLevelPanel("增强图1窗宽窗位",
+                out enhanced1WindowWidthTrackBar, out enhanced1WindowLevelTrackBar,
+                out enhanced1WindowWidthLabel, out enhanced1WindowLevelLabel,
+                out enhanced1ResetWindowLevelBtn, out enhanced1InvertBtn,
+                OnEnhanced1WindowLevelChanged, OnEnhanced1ResetWindowLevel, OnEnhanced1InvertImage);
 
             // 创建直方图
             enhanced1HistogramChart = CreateChart("增强图1直方图");
@@ -417,11 +472,12 @@ namespace ImageAnalysisTool.UI.Forms
             // 添加到列布局
             columnLayout.Controls.Add(enhancedLabel, 0, 0);
             columnLayout.Controls.Add(enhancedPictureBox, 0, 1);
-            columnLayout.Controls.Add(enhanced1HistogramChart, 0, 2);
-            columnLayout.Controls.Add(enhanced1PixelMappingChart, 0, 3);
-            columnLayout.Controls.Add(enhanced1AnalysisTextBox, 0, 4);
-            columnLayout.Controls.Add(enhanced1GrayValueAnalysisTextBox, 0, 5);
-            columnLayout.Controls.Add(enhanced1AISummaryTextBox, 0, 6);
+            columnLayout.Controls.Add(enhanced1WindowLevelPanel, 0, 2);  // 窗宽窗位控制
+            columnLayout.Controls.Add(enhanced1HistogramChart, 0, 3);
+            columnLayout.Controls.Add(enhanced1PixelMappingChart, 0, 4);
+            columnLayout.Controls.Add(enhanced1AnalysisTextBox, 0, 5);
+            columnLayout.Controls.Add(enhanced1GrayValueAnalysisTextBox, 0, 6);
+            columnLayout.Controls.Add(enhanced1AISummaryTextBox, 0, 7);
 
             enhanced1ColumnPanel.Controls.Add(columnLayout);
 
@@ -446,17 +502,19 @@ namespace ImageAnalysisTool.UI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 7,  // 增加到7行
+                RowCount = 8,  // 增加到8行，添加窗宽窗位控制
                 AutoSize = true
             };
 
             // 设置行样式（使用绝对高度，让列变得更长）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));   // 标题
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 图像
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));  // 窗宽窗位控制（增加高度）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 直方图
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 像素映射
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300F));  // 分析结果（增大）
             columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 250F));  // 灰度值分析（增大）
+            columnLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));  // 智能分析总结（新增）
 
             // 创建标题标签
             enhanced2Label = new Label
@@ -475,6 +533,13 @@ namespace ImageAnalysisTool.UI.Forms
                 SizeMode = PictureBoxSizeMode.Zoom,
                 BorderStyle = BorderStyle.FixedSingle
             };
+
+            // 创建窗宽窗位控制面板
+            enhanced2WindowLevelPanel = CreateWindowLevelPanel("增强图2窗宽窗位",
+                out enhanced2WindowWidthTrackBar, out enhanced2WindowLevelTrackBar,
+                out enhanced2WindowWidthLabel, out enhanced2WindowLevelLabel,
+                out enhanced2ResetWindowLevelBtn, out enhanced2InvertBtn,
+                OnEnhanced2WindowLevelChanged, OnEnhanced2ResetWindowLevel, OnEnhanced2InvertImage);
 
             // 创建直方图
             enhanced2HistogramChart = CreateChart("增强图2直方图");
@@ -513,11 +578,12 @@ namespace ImageAnalysisTool.UI.Forms
             // 添加到列布局
             columnLayout.Controls.Add(enhanced2Label, 0, 0);
             columnLayout.Controls.Add(enhanced2PictureBox, 0, 1);
-            columnLayout.Controls.Add(enhanced2HistogramChart, 0, 2);
-            columnLayout.Controls.Add(enhanced2PixelMappingChart, 0, 3);
-            columnLayout.Controls.Add(enhanced2AnalysisTextBox, 0, 4);
-            columnLayout.Controls.Add(enhanced2GrayValueAnalysisTextBox, 0, 5);
-            columnLayout.Controls.Add(enhanced2AISummaryTextBox, 0, 6);
+            columnLayout.Controls.Add(enhanced2WindowLevelPanel, 0, 2);  // 窗宽窗位控制
+            columnLayout.Controls.Add(enhanced2HistogramChart, 0, 3);
+            columnLayout.Controls.Add(enhanced2PixelMappingChart, 0, 4);
+            columnLayout.Controls.Add(enhanced2AnalysisTextBox, 0, 5);
+            columnLayout.Controls.Add(enhanced2GrayValueAnalysisTextBox, 0, 6);
+            columnLayout.Controls.Add(enhanced2AISummaryTextBox, 0, 7);
 
             enhanced2ColumnPanel.Controls.Add(columnLayout);
 
@@ -741,14 +807,21 @@ namespace ImageAnalysisTool.UI.Forms
                 }
             };
 
+            // 新增：打开日志按钮
+            openLogsBtn = new Button
+            {
+                Text = "打开日志",
+                Size = new System.Drawing.Size(100, 35),
+                Margin = new Padding(5),
+                BackColor = Color.LightYellow,
+                ForeColor = Color.Black
+            };
+            openLogsBtn.Click += OpenLogsBtn_Click;
+
             // 添加按钮到布局
             buttonLayout.Controls.AddRange(new Control[] {
-                loadOriginalBtn, loadEnhancedBtn, loadEnhanced2Btn, analyzeBtn, compareBtn, exportReportBtn, imageProcessingBtn, advancedRegionProcessingBtn, itkProcessingBtn
+                loadOriginalBtn, loadEnhancedBtn, loadEnhanced2Btn, analyzeBtn, compareBtn, exportReportBtn, imageProcessingBtn, advancedRegionProcessingBtn, itkProcessingBtn, openLogsBtn
             });
-
-            // 修复 CS0103: 调用UI控件创建方法
-            CreateMappingModeControls();
-            buttonLayout.Controls.Add(mappingModePanel);
 
             topControlPanel.Controls.Add(buttonLayout);
 
@@ -759,51 +832,7 @@ namespace ImageAnalysisTool.UI.Forms
             mainLayout.SetColumnSpan(topControlPanel, 3);
         }
 
-        /// <summary>
-        /// 创建像素映射模式控件
-        /// </summary>
-        private void CreateMappingModeControls()
-        {
-            mappingModePanel = new Panel
-            {
-                Size = new System.Drawing.Size(150, 35),
-                Margin = new Padding(5),
-                BorderStyle = BorderStyle.FixedSingle
-            };
 
-            fullImageMappingRadio = new RadioButton
-            {
-                Text = "全图",
-                Location = new System.Drawing.Point(5, 8),
-                Size = new System.Drawing.Size(50, 20),
-                Checked = true, // 默认选择全图模式
-                Font = new Font("Arial", 8)
-            };
-            fullImageMappingRadio.CheckedChanged += MappingModeRadio_CheckedChanged;
-
-            // 添加标签
-            var modeLabel = new Label
-            {
-                Text = "映射:",
-                Location = new System.Drawing.Point(60, 8),
-                Size = new System.Drawing.Size(30, 20),
-                Font = new Font("Arial", 8),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            mappingModePanel.Controls.AddRange(new Control[] {
-                fullImageMappingRadio, modeLabel
-            });
-        }
-
-        /// <summary>
-        /// 像素映射模式切换事件处理
-        /// </summary>
-        private void MappingModeRadio_CheckedChanged(object sender, EventArgs e)
-        {
-            // 重新绘制所有像素映射图
-            RefreshPixelMappingCharts();
-        }
 
         /// <summary>
         /// 刷新所有像素映射图表
@@ -1045,10 +1074,27 @@ namespace ImageAnalysisTool.UI.Forms
                     try
                     {
                         originalImage?.Dispose();
-                        originalImage = LoadImageFile(dialog.FileName);
+
+                        string extension = Path.GetExtension(dialog.FileName).ToLower();
+                        if (extension == ".dcm" || extension == ".dic" || extension == ".acr")
+                        {
+                            // DICOM文件，获取窗宽窗位信息
+                            originalImage = LoadDicomImageWithWindowLevel(dialog.FileName, out originalWindowWidth, out originalWindowLevel);
+                            originalPictureBox.Image = ConvertMatToBitmapWithWindowLevel(originalImage, originalWindowWidth, originalWindowLevel, originalInverted);
+                            logger.Info($"加载DICOM原图: {dialog.FileName}, 窗宽={originalWindowWidth:F1}, 窗位={originalWindowLevel:F1}");
+                        }
+                        else
+                        {
+                            // 普通图像文件
+                            originalImage = LoadImageFile(dialog.FileName);
+                            originalPictureBox.Image = ConvertMatToBitmap(originalImage);
+                        }
+
                         originalImageFileName = dialog.FileName;
 
-                        originalPictureBox.Image = ConvertMatToBitmap(originalImage);
+                        // 初始化窗宽窗位滑动条
+                        InitializeOriginalWindowLevelControls();
+
                         UpdateImageLabels();
                         CheckCanAnalyze();
                     }
@@ -1070,10 +1116,27 @@ namespace ImageAnalysisTool.UI.Forms
                     try
                     {
                         enhancedImage?.Dispose();
-                        enhancedImage = LoadImageFile(dialog.FileName);
+
+                        string extension = Path.GetExtension(dialog.FileName).ToLower();
+                        if (extension == ".dcm" || extension == ".dic" || extension == ".acr")
+                        {
+                            // DICOM文件，获取窗宽窗位信息
+                            enhancedImage = LoadDicomImageWithWindowLevel(dialog.FileName, out enhancedWindowWidth, out enhancedWindowLevel);
+                            enhancedPictureBox.Image = ConvertMatToBitmapWithWindowLevel(enhancedImage, enhancedWindowWidth, enhancedWindowLevel, enhanced1Inverted);
+                            logger.Info($"加载DICOM增强图1: {dialog.FileName}, 窗宽={enhancedWindowWidth:F1}, 窗位={enhancedWindowLevel:F1}");
+                        }
+                        else
+                        {
+                            // 普通图像文件
+                            enhancedImage = LoadImageFile(dialog.FileName);
+                            enhancedPictureBox.Image = ConvertMatToBitmap(enhancedImage);
+                        }
+
                         enhancedImageFileName = dialog.FileName;
 
-                        enhancedPictureBox.Image = ConvertMatToBitmap(enhancedImage);
+                        // 初始化窗宽窗位滑动条
+                        InitializeEnhanced1WindowLevelControls();
+
                         UpdateImageLabels();
                         CheckCanAnalyze();
                     }
@@ -1095,10 +1158,27 @@ namespace ImageAnalysisTool.UI.Forms
                     try
                     {
                         enhanced2Image?.Dispose();
-                        enhanced2Image = LoadImageFile(dialog.FileName);
+
+                        string extension = Path.GetExtension(dialog.FileName).ToLower();
+                        if (extension == ".dcm" || extension == ".dic" || extension == ".acr")
+                        {
+                            // DICOM文件，获取窗宽窗位信息
+                            enhanced2Image = LoadDicomImageWithWindowLevel(dialog.FileName, out enhanced2WindowWidth, out enhanced2WindowLevel);
+                            enhanced2PictureBox.Image = ConvertMatToBitmapWithWindowLevel(enhanced2Image, enhanced2WindowWidth, enhanced2WindowLevel, enhanced2Inverted);
+                            logger.Info($"加载DICOM增强图2: {dialog.FileName}, 窗宽={enhanced2WindowWidth:F1}, 窗位={enhanced2WindowLevel:F1}");
+                        }
+                        else
+                        {
+                            // 普通图像文件
+                            enhanced2Image = LoadImageFile(dialog.FileName);
+                            enhanced2PictureBox.Image = ConvertMatToBitmap(enhanced2Image);
+                        }
+
                         enhanced2ImageFileName = dialog.FileName;
 
-                        enhanced2PictureBox.Image = ConvertMatToBitmap(enhanced2Image);
+                        // 初始化窗宽窗位滑动条
+                        InitializeEnhanced2WindowLevelControls();
+
                         UpdateImageLabels();
                         CheckCanAnalyze();
                     }
@@ -1169,35 +1249,63 @@ namespace ImageAnalysisTool.UI.Forms
         /// </summary>
         private void UpdateImageLabels()
         {
+            var smallFont = new Font(originalLabel.Font.FontFamily, 9);
             // 更新原图标签
             if (!string.IsNullOrEmpty(originalImageFileName))
             {
-                originalLabel.Text = $"原始图像 - {Path.GetFileName(originalImageFileName)}";
+                string extension = Path.GetExtension(originalImageFileName).ToLower();
+                if (extension == ".dcm" || extension == ".dic" || extension == ".acr")
+                {
+                    originalLabel.Text = $"原始图像 - {Path.GetFileName(originalImageFileName)}\n窗宽: {originalWindowWidth:F1}, 窗位: {originalWindowLevel:F1}";
+                }
+                else
+                {
+                    originalLabel.Text = $"原始图像 - {Path.GetFileName(originalImageFileName)}";
+                }
             }
             else
             {
                 originalLabel.Text = "原始图像";
             }
+            originalLabel.Font = smallFont;
 
             // 更新增强图1标签
             if (!string.IsNullOrEmpty(enhancedImageFileName))
             {
-                enhancedLabel.Text = $"增强图像1 - {Path.GetFileName(enhancedImageFileName)}";
+                string extension = Path.GetExtension(enhancedImageFileName).ToLower();
+                if (extension == ".dcm" || extension == ".dic" || extension == ".acr")
+                {
+                    enhancedLabel.Text = $"增强图像1 - {Path.GetFileName(enhancedImageFileName)}\n窗宽: {enhancedWindowWidth:F1}, 窗位: {enhancedWindowLevel:F1}";
+                }
+                else
+                {
+                    enhancedLabel.Text = $"增强图像1 - {Path.GetFileName(enhancedImageFileName)}";
+                }
             }
             else
             {
                 enhancedLabel.Text = "增强图像1";
             }
+            enhancedLabel.Font = smallFont;
 
             // 更新增强图2标签
             if (!string.IsNullOrEmpty(enhanced2ImageFileName))
             {
-                enhanced2Label.Text = $"增强图像2 - {Path.GetFileName(enhanced2ImageFileName)}";
+                string extension = Path.GetExtension(enhanced2ImageFileName).ToLower();
+                if (extension == ".dcm" || extension == ".dic" || extension == ".acr")
+                {
+                    enhanced2Label.Text = $"增强图像2 - {Path.GetFileName(enhanced2ImageFileName)}\n窗宽: {enhanced2WindowWidth:F1}, 窗位: {enhanced2WindowLevel:F1}";
+                }
+                else
+                {
+                    enhanced2Label.Text = $"增强图像2 - {Path.GetFileName(enhanced2ImageFileName)}";
+                }
             }
             else
             {
                 enhanced2Label.Text = "增强图像2";
             }
+            enhanced2Label.Font = smallFont;
         }
 
         /// <summary>
@@ -2832,10 +2940,22 @@ namespace ImageAnalysisTool.UI.Forms
         
 
         /// <summary>
-        /// 加载DICOM图像
+        /// 加载DICOM图像（支持自动窗宽窗位调节）
         /// </summary>
         private Mat LoadDicomImage(string dicomPath)
         {
+            return LoadDicomImageWithWindowLevel(dicomPath, out _, out _);
+        }
+
+        /// <summary>
+        /// 加载DICOM图像并返回窗宽窗位信息
+        /// </summary>
+        private Mat LoadDicomImageWithWindowLevel(string dicomPath, out double windowWidth, out double windowLevel)
+        {
+            // 初始化out参数
+            windowWidth = 0;
+            windowLevel = 0;
+
             var dicomFile = DicomFile.Open(dicomPath);
 
             if (!dicomFile.Dataset.Contains(DicomTag.Columns) ||
@@ -2856,7 +2976,253 @@ namespace ImageAnalysisTool.UI.Forms
             int length = height * width * 2; // 16位 = 2字节
             Marshal.Copy(rawData, 0, dicomMat.Data, length);
 
+            // 确保数据是16位的
+            if (dicomMat.Type() != MatType.CV_16UC1)
+            {
+                Mat temp = new Mat();
+                if (dicomMat.Type() == MatType.CV_8UC1)
+                {
+                    dicomMat.Dispose();
+                    throw new NotSupportedException("当前不支持 8 位 DICOM 图像，请使用 16 位图像。");
+                }
+                else
+                {
+                    dicomMat.ConvertTo(temp, MatType.CV_16UC1);
+                }
+                dicomMat.Dispose();
+                dicomMat = temp;
+            }
+
+            // 提取窗宽窗位信息
+            (windowWidth, windowLevel) = ExtractWindowLevelFromDicom(dicomFile, dicomMat);
+
             return dicomMat;
+        }
+
+        /// <summary>
+        /// 从DICOM文件中提取并计算窗宽窗位信息
+        /// </summary>
+        private (double windowWidth, double windowLevel) ExtractWindowLevelFromDicom(DicomFile dicomFile, Mat imageData)
+        {
+            double windowWidth = 32768.0;   // 工业X射线图像默认值
+            double windowLevel = 32768.0;
+
+            try
+            {
+
+                    double dataMin, dataMax;
+                    Cv2.MinMaxLoc(imageData, out dataMin, out dataMax);
+                    windowWidth = dataMax - dataMin;
+                    windowLevel = (dataMin + dataMax) / 2;
+
+                // 确保窗宽不为零
+                if (windowWidth <= 0)
+                {
+                    windowWidth = 32768.0;  // 工业X射线图像默认值
+                }
+
+                logger.Info($"DICOM窗宽窗位: 窗宽={windowWidth:F1}, 窗位={windowLevel:F1}");
+            }
+            catch (Exception ex)
+            {
+                logger.Warn($"提取窗宽窗位失败，使用默认值: {ex.Message}");
+                windowWidth = 32768.0;  // 工业X射线图像默认值
+                windowLevel = 32768.0;
+            }
+
+            return (windowWidth, windowLevel);
+        }
+
+        /// <summary>
+        /// 创建窗宽窗位LUT查找表（16位到8位映射）
+        /// </summary>
+        private byte[] CreateWindowLevelLUT(double windowWidth, double windowLevel, bool inverted = false)
+        {
+            byte[] lut = new byte[65536]; // 16位图像的完整范围
+
+            double minLevel = windowLevel - windowWidth / 2.0;
+            double maxLevel = windowLevel + windowWidth / 2.0;
+
+            for (int i = 0; i < 65536; i++)
+            {
+                byte value;
+
+                if (maxLevel <= minLevel)
+                {
+                    value = 128; // 如果窗宽为0，设置为中等灰度
+                }
+                else if (i <= minLevel)
+                {
+                    value = 0;
+                }
+                else if (i >= maxLevel)
+                {
+                    value = 255;
+                }
+                else
+                {
+                    // 线性映射到0-255范围
+                    value = (byte)Math.Round((i - minLevel) * 255.0 / (maxLevel - minLevel));
+                }
+
+                // 应用反相
+                lut[i] = inverted ? (byte)(255 - value) : value;
+            }
+
+            return lut;
+        }
+
+        /// <summary>
+        /// 使用LUT快速应用窗宽窗位变换到图像
+        /// </summary>
+        private Mat ApplyWindowLevelWithLUT(Mat image, double windowWidth, double windowLevel, bool inverted = false)
+        {
+            if (image == null || image.Empty())
+                return image;
+
+            try
+            {
+                // 创建LUT
+                byte[] lut = CreateWindowLevelLUT(windowWidth, windowLevel, inverted);
+
+                // 应用LUT变换
+                Mat result = new Mat();
+                Mat lutMat = new Mat(1, 256, MatType.CV_8UC1, lut);
+
+                // 对于16位图像，需要先缩放到8位范围再应用LUT
+                if (image.Type() == MatType.CV_16UC1)
+                {
+                    Mat temp = new Mat();
+                    // 直接使用LUT数组进行映射
+                    result = ApplyLUTDirect(image, lut);
+                    temp.Dispose();
+                }
+                else
+                {
+                    // 8位图像直接应用LUT
+                    Cv2.LUT(image, lutMat, result);
+                }
+
+                lutMat.Dispose();
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"LUT窗宽窗位变换失败: {ex.Message}");
+                // 回退到原始方法
+                return ApplyWindowLevelOriginal(image, windowWidth, windowLevel, inverted);
+            }
+        }
+
+        /// <summary>
+        /// 直接对16位图像应用LUT映射
+        /// </summary>
+        private Mat ApplyLUTDirect(Mat image16, byte[] lut)
+        {
+            Mat result = new Mat(image16.Size(), MatType.CV_8UC1);
+
+            unsafe
+            {
+                ushort* srcPtr = (ushort*)image16.Data.ToPointer();
+                byte* dstPtr = (byte*)result.Data.ToPointer();
+                int totalPixels = image16.Rows * image16.Cols;
+
+                for (int i = 0; i < totalPixels; i++)
+                {
+                    dstPtr[i] = lut[srcPtr[i]];
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 原始的窗宽窗位变换方法（作为回退）
+        /// </summary>
+        private Mat ApplyWindowLevelOriginal(Mat image, double windowWidth, double windowLevel, bool inverted = false)
+        {
+            if (image == null || image.Empty())
+                return image;
+
+            try
+            {
+                Mat result = new Mat();
+                Mat normalized = new Mat();
+
+                // 转换为32位浮点数进行计算
+                image.ConvertTo(normalized, MatType.CV_32F);
+
+                // 计算窗宽窗位的上下限
+                double minLevel = windowLevel - windowWidth / 2.0;
+                double maxLevel = windowLevel + windowWidth / 2.0;
+
+                // 应用窗宽窗位变换
+                Cv2.Threshold(normalized, normalized, maxLevel, maxLevel, ThresholdTypes.Trunc);
+                Cv2.Threshold(normalized, normalized, minLevel, 0, ThresholdTypes.Tozero);
+
+                // 归一化到0-255范围用于显示
+                if (maxLevel > minLevel)
+                {
+                    normalized = (normalized - minLevel) * 255.0 / (maxLevel - minLevel);
+                }
+                else
+                {
+                    normalized.SetTo(new Scalar(128));
+                }
+
+                // 应用反相
+                if (inverted)
+                {
+                    normalized = 255.0 - normalized;
+                }
+
+                // 转换为8位用于显示
+                normalized.ConvertTo(result, MatType.CV_8UC1);
+                normalized.Dispose();
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"原始窗宽窗位变换失败: {ex.Message}");
+                Mat result = new Mat();
+                image.ConvertTo(result, MatType.CV_8UC1, 255.0 / 65535.0);
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// 应用窗宽窗位变换到图像（使用LUT优化）
+        /// </summary>
+        private Mat ApplyWindowLevel(Mat image, double windowWidth, double windowLevel, bool inverted = false)
+        {
+            return ApplyWindowLevelWithLUT(image, windowWidth, windowLevel, inverted);
+        }
+
+        /// <summary>
+        /// 将Mat转换为Bitmap（支持窗宽窗位和反相）
+        /// </summary>
+        private Bitmap ConvertMatToBitmapWithWindowLevel(Mat mat, double windowWidth, double windowLevel, bool inverted = false)
+        {
+            if (mat == null || mat.Empty())
+                return null;
+
+            try
+            {
+                // 应用窗宽窗位变换（包含反相）
+                Mat windowedMat = ApplyWindowLevel(mat, windowWidth, windowLevel, inverted);
+
+                // 转换为Bitmap
+                Bitmap bitmap = BitmapConverter.ToBitmap(windowedMat);
+                windowedMat.Dispose();
+
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"转换图像失败: {ex.Message}");
+                return null;
+            }
         }
 
 
@@ -4003,5 +4369,603 @@ namespace ImageAnalysisTool.UI.Forms
                 MessageBox.Show($"打开图像处理窗口失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
+        /// <summary>
+        /// 打开日志按钮点击事件 - 打开logs目录
+        /// </summary>
+        private void OpenLogsBtn_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // 获取应用程序根目录下的logs文件夹路径
+                string appDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                string logsDirectory = Path.Combine(appDirectory, "logs");
+
+                // 如果logs目录不存在，创建它
+                if (!Directory.Exists(logsDirectory))
+                {
+                    Directory.CreateDirectory(logsDirectory);
+                    logger.Info($"创建日志目录: {logsDirectory}");
+                }
+
+                // 使用Windows资源管理器打开logs目录
+                System.Diagnostics.Process.Start("explorer.exe", logsDirectory);
+                logger.Info($"打开日志目录: {logsDirectory}");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"打开日志目录失败: {ex.Message}");
+                MessageBox.Show($"打开日志目录失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        #region 窗宽窗位控制方法
+
+        /// <summary>
+        /// 创建窗宽窗位控制面板（针对工业X射线图像优化）
+        /// </summary>
+        private GroupBox CreateWindowLevelPanel(string title,
+            out TrackBar windowWidthTrackBar, out TrackBar windowLevelTrackBar,
+            out Label windowWidthLabel, out Label windowLevelLabel,
+            out Button resetButton, out Button invertButton,
+            EventHandler windowLevelChangedHandler, EventHandler resetHandler, EventHandler invertHandler)
+        {
+            var panel = new GroupBox
+            {
+                Text = title,
+                Dock = DockStyle.Fill,
+                Font = new Font("Arial", 9, FontStyle.Bold)
+            };
+
+            // 窗宽控制
+            windowWidthLabel = new Label
+            {
+                Text = "窗宽: 32768",
+                Location = new System.Drawing.Point(5, 25),
+                Size = new System.Drawing.Size(80, 20),
+                Font = new Font("Arial", 8)
+            };
+
+            windowWidthTrackBar = new TrackBar
+            {
+                Minimum = 1,
+                Maximum = 65535,        // 初始范围，将被动态调整
+                Value = 32768,          // 初始默认值，将被动态调整
+                Location = new System.Drawing.Point(90, 20),
+                Size = new System.Drawing.Size(180, 35),  // 增加滑块长度
+                TickFrequency = 5000,   // 初始刻度间隔，将被动态调整
+                SmallChange = 100,      // 初始小步长，将被动态调整
+                LargeChange = 1000      // 初始大步长，将被动态调整
+            };
+
+            // 窗位控制
+            windowLevelLabel = new Label
+            {
+                Text = "窗位: 32768",
+                Location = new System.Drawing.Point(5, 65),
+                Size = new System.Drawing.Size(80, 20),
+                Font = new Font("Arial", 8)
+            };
+
+            windowLevelTrackBar = new TrackBar
+            {
+                Minimum = 0,
+                Maximum = 65535,        // 初始范围，将被动态调整
+                Value = 32768,          // 初始默认值，将被动态调整
+                Location = new System.Drawing.Point(90, 60),
+                Size = new System.Drawing.Size(180, 35),  // 增加滑块长度
+                TickFrequency = 5000,   // 初始刻度间隔，将被动态调整
+                SmallChange = 50,       // 初始小步长，将被动态调整
+                LargeChange = 500       // 初始大步长，将被动态调整
+            };
+
+            // 重置按钮
+            resetButton = new Button
+            {
+                Text = "重置",
+                Location = new System.Drawing.Point(280, 25),
+                Size = new System.Drawing.Size(50, 25),
+                Font = new Font("Arial", 8)
+            };
+
+            // 反相按钮
+            invertButton = new Button
+            {
+                Text = "反相",
+                Location = new System.Drawing.Point(280, 55),
+                Size = new System.Drawing.Size(50, 25),
+                Font = new Font("Arial", 8)
+            };
+
+            // 绑定事件
+            windowWidthTrackBar.Scroll += windowLevelChangedHandler;
+            windowLevelTrackBar.Scroll += windowLevelChangedHandler;
+            resetButton.Click += resetHandler;
+            invertButton.Click += invertHandler;
+
+            // 添加控件到面板
+            panel.Controls.Add(windowWidthLabel);
+            panel.Controls.Add(windowWidthTrackBar);
+            panel.Controls.Add(windowLevelLabel);
+            panel.Controls.Add(windowLevelTrackBar);
+            panel.Controls.Add(resetButton);
+            panel.Controls.Add(invertButton);
+
+            return panel;
+        }
+
+        /// <summary>
+        /// 初始化原图窗宽窗位控件（使用动态范围）
+        /// </summary>
+        private void InitializeOriginalWindowLevelControls()
+        {
+            if (originalWindowWidthTrackBar == null || originalWindowLevelTrackBar == null || originalImage == null) return;
+
+            // 更新TrackBar范围基于图像实际像素值（工业X射线图像优化：剔除过曝值）
+            UpdateWindowLevelTrackBarRange(originalImage, originalWindowWidthTrackBar, originalWindowLevelTrackBar,
+                ref originalWindowWidth, ref originalWindowLevel, 2.0, 98.0); // 剔除2%-98%范围外的异常值
+
+            // 更新标签显示
+            originalWindowWidthLabel.Text = $"窗宽: {(int)originalWindowWidth}";
+            originalWindowLevelLabel.Text = $"窗位: {(int)originalWindowLevel}";
+        }
+
+        /// <summary>
+        /// 初始化增强图1窗宽窗位控件（使用动态范围）
+        /// </summary>
+        private void InitializeEnhanced1WindowLevelControls()
+        {
+            if (enhanced1WindowWidthTrackBar == null || enhanced1WindowLevelTrackBar == null || enhancedImage == null) return;
+
+            // 更新TrackBar范围基于图像实际像素值（工业X射线图像优化：剔除过曝值）
+            UpdateWindowLevelTrackBarRange(enhancedImage, enhanced1WindowWidthTrackBar, enhanced1WindowLevelTrackBar,
+                ref enhancedWindowWidth, ref enhancedWindowLevel, 2.0, 98.0); // 剔除2%-98%范围外的异常值
+
+            // 更新标签显示
+            enhanced1WindowWidthLabel.Text = $"窗宽: {(int)enhancedWindowWidth}";
+            enhanced1WindowLevelLabel.Text = $"窗位: {(int)enhancedWindowLevel}";
+        }
+
+        /// <summary>
+        /// 初始化增强图2窗宽窗位控件（使用动态范围）
+        /// </summary>
+        private void InitializeEnhanced2WindowLevelControls()
+        {
+            if (enhanced2WindowWidthTrackBar == null || enhanced2WindowLevelTrackBar == null || enhanced2Image == null) return;
+
+            // 更新TrackBar范围基于图像实际像素值（工业X射线图像优化：剔除过曝值）
+            UpdateWindowLevelTrackBarRange(enhanced2Image, enhanced2WindowWidthTrackBar, enhanced2WindowLevelTrackBar,
+                ref enhanced2WindowWidth, ref enhanced2WindowLevel, 2.0, 98.0); // 剔除2%-98%范围外的异常值
+
+            // 更新标签显示
+            enhanced2WindowWidthLabel.Text = $"窗宽: {(int)enhanced2WindowWidth}";
+            enhanced2WindowLevelLabel.Text = $"窗位: {(int)enhanced2WindowLevel}";
+        }
+
+        /// <summary>
+        /// 获取图像的实际灰度值范围（使用百分位数剔除过曝值和噪声）
+        /// </summary>
+        private (int minVal, int maxVal) GetImagePixelValueRange(Mat image, double lowerPercentile = 1.0, double upperPercentile = 99.0)
+        {
+            if (image == null || image.Empty())
+                return (0, 65535); // 返回默认值
+
+            try
+            {
+                // 首先获取基本的最小最大值用于日志
+                double absoluteMin, absoluteMax;
+                Cv2.MinMaxLoc(image, out absoluteMin, out absoluteMax);
+
+                // 计算直方图来获取百分位数
+                Mat hist = new Mat();
+                int[] histSize = { 65536 }; // 16位图像的完整范围
+                Rangef[] ranges = { new Rangef(0, 65536) };
+                int[] channels = { 0 };
+
+                Cv2.CalcHist(new Mat[] { image }, channels, new Mat(), hist, 1, histSize, ranges);
+
+                // 获取总像素数
+                long totalPixels = image.Rows * image.Cols;
+
+                // 计算百分位数对应的像素数量
+                long lowerThreshold = (long)(totalPixels * lowerPercentile / 100.0);
+                long upperThreshold = (long)(totalPixels * upperPercentile / 100.0);
+
+                // 查找百分位数对应的灰度值
+                int minPercentileValue = 0;
+                int maxPercentileValue = 65535;
+
+                long cumulativeCount = 0;
+                bool foundMin = false;
+
+                // 计算被剔除的像素统计（在查找百分位数的同时计算）
+                long excludedLowerPixels = 0;
+                long excludedUpperPixels = 0;
+
+                // 从直方图中查找百分位数
+                for (int i = 0; i < 65536; i++)
+                {
+                    float count = hist.At<float>(i);
+                    cumulativeCount += (long)count;
+
+                    if (!foundMin && cumulativeCount >= lowerThreshold)
+                    {
+                        minPercentileValue = i;
+                        foundMin = true;
+                        // 计算被剔除的下限像素
+                        excludedLowerPixels = cumulativeCount - (long)count;
+                    }
+
+                    if (cumulativeCount >= upperThreshold)
+                    {
+                        maxPercentileValue = i;
+                        // 计算被剔除的上限像素
+                        excludedUpperPixels = totalPixels - cumulativeCount;
+                        break;
+                    }
+                }
+
+                hist.Dispose();
+
+                // 给范围留一点缓冲，避免边界值无法微调
+                int range = maxPercentileValue - minPercentileValue;
+                int buffer = Math.Max(100, range / 20); // 至少100的缓冲，或5%的缓冲
+
+                int newMin = Math.Max(0, minPercentileValue - buffer);
+                int newMax = Math.Min(65535, maxPercentileValue + buffer);
+
+                // 确保最小最大值之间有足够大的范围，避免TrackBar崩溃
+                if (newMax - newMin < 1000)
+                {
+                    int center = (newMin + newMax) / 2;
+                    newMin = Math.Max(0, center - 500);
+                    newMax = Math.Min(65535, center + 500);
+
+                    if (newMax - newMin < 1000)
+                    {
+                        newMax = Math.Min(65535, newMin + 1000);
+                    }
+                }
+
+                double excludedLowerPercent = (double)excludedLowerPixels / totalPixels * 100;
+                double excludedUpperPercent = (double)excludedUpperPixels / totalPixels * 100;
+
+                logger.Info($"图像像素值范围分析:");
+                logger.Info($"  绝对范围: [{(int)absoluteMin}, {(int)absoluteMax}]");
+                logger.Info($"  {lowerPercentile}%-{upperPercentile}%百分位数: [{minPercentileValue}, {maxPercentileValue}]");
+                logger.Info($"  最终调整范围: [{newMin}, {newMax}]");
+                logger.Info($"  剔除像素: 下限{excludedLowerPercent:F1}% ({excludedLowerPixels}), 上限{excludedUpperPercent:F1}% ({excludedUpperPixels})");
+
+                return (newMin, newMax);
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"获取图像像素值范围失败: {ex.Message}");
+                return (0, 65535); // 返回默认值
+            }
+        }
+
+        /// <summary>
+        /// 更新窗宽窗位TrackBar的范围（基于图像实际像素值，使用百分位数剔除异常值）
+        /// </summary>
+        private void UpdateWindowLevelTrackBarRange(Mat currentImage,
+            TrackBar windowWidthTrackBar, TrackBar windowLevelTrackBar,
+            ref double currentWindowWidth, ref double currentWindowLevel,
+            double lowerPercentile = 1.0, double upperPercentile = 99.0)
+        {
+            if (currentImage == null || currentImage.Empty()) return;
+
+            try
+            {
+                // 使用百分位数剔除过曝值和噪声
+                (int minVal, int maxVal) = GetImagePixelValueRange(currentImage, lowerPercentile, upperPercentile);
+
+                // 设置窗位TrackBar的范围
+                windowLevelTrackBar.Minimum = minVal;
+                windowLevelTrackBar.Maximum = maxVal;
+
+                // 设置窗宽TrackBar的范围（窗宽最大为整个范围）
+                windowWidthTrackBar.Minimum = 1;
+                windowWidthTrackBar.Maximum = maxVal - minVal;
+
+                // 调整当前窗宽窗位值到新范围内
+                currentWindowLevel = Math.Max(minVal, Math.Min(maxVal, currentWindowLevel));
+                currentWindowWidth = Math.Max(1, Math.Min(maxVal - minVal, currentWindowWidth));
+
+                // 设置TrackBar当前值
+                windowLevelTrackBar.Value = (int)Math.Round(currentWindowLevel);
+                windowWidthTrackBar.Value = (int)Math.Round(currentWindowWidth);
+
+                // 重新调整SmallChange和LargeChange，使其在新范围内合理
+                int levelRange = maxVal - minVal;
+                int widthRange = maxVal - minVal;
+
+                // 窗位调节步长
+                windowLevelTrackBar.SmallChange = Math.Max(1, levelRange / 200); // 200步走完
+                windowLevelTrackBar.LargeChange = Math.Max(10, levelRange / 20); // 20步走完
+                windowLevelTrackBar.TickFrequency = Math.Max(100, levelRange / 10); // 10个主要刻度
+
+                // 窗宽调节步长
+                windowWidthTrackBar.SmallChange = Math.Max(1, widthRange / 200);
+                windowWidthTrackBar.LargeChange = Math.Max(10, widthRange / 20);
+                windowWidthTrackBar.TickFrequency = Math.Max(100, widthRange / 10);
+
+                logger.Info($"TrackBar范围已更新: 窗位[{minVal}, {maxVal}], 窗宽[1, {maxVal - minVal}]");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"更新TrackBar范围失败: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region 原图窗宽窗位事件处理
+
+        private void OnOriginalWindowLevelChanged(object sender, EventArgs e)
+        {
+            if (originalImage == null || originalImage.Empty()) return;
+
+            try
+            {
+                // 更新标签显示
+                originalWindowWidthLabel.Text = $"窗宽: {originalWindowWidthTrackBar.Value}";
+                originalWindowLevelLabel.Text = $"窗位: {originalWindowLevelTrackBar.Value}";
+
+                // 更新存储的窗宽窗位值
+                originalWindowWidth = originalWindowWidthTrackBar.Value;
+                originalWindowLevel = originalWindowLevelTrackBar.Value;
+
+                // 重新应用窗宽窗位并更新显示
+                originalPictureBox.Image?.Dispose();
+                originalPictureBox.Image = ConvertMatToBitmapWithWindowLevel(originalImage, originalWindowWidth, originalWindowLevel, originalInverted);
+
+                logger.Info($"原图窗宽窗位调整: 窗宽={originalWindowWidth:F1}, 窗位={originalWindowLevel:F1}");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"原图窗宽窗位调整失败: {ex.Message}");
+            }
+        }
+
+        private void OnOriginalResetWindowLevel(object sender, EventArgs e)
+        {
+            if (originalImage == null || originalImage.Empty()) return;
+
+            try
+            {
+                // 重新提取原始窗宽窗位
+                string extension = Path.GetExtension(originalImageFileName).ToLower();
+                if (extension == ".dcm" || extension == ".dic" || extension == ".acr")
+                {
+                    var dicomFile = DicomFile.Open(originalImageFileName);
+                    (originalWindowWidth, originalWindowLevel) = ExtractWindowLevelFromDicom(dicomFile, originalImage);
+                }
+                else
+                {
+                    // 非DICOM图像使用默认值（工业X射线图像）
+                    originalWindowWidth = 32768.0;
+                    originalWindowLevel = 32768.0;
+                }
+
+                // 更新滑动条
+                originalWindowWidthTrackBar.Value = Math.Max(originalWindowWidthTrackBar.Minimum,
+                    Math.Min(originalWindowWidthTrackBar.Maximum, (int)originalWindowWidth));
+                originalWindowLevelTrackBar.Value = Math.Max(originalWindowLevelTrackBar.Minimum,
+                    Math.Min(originalWindowLevelTrackBar.Maximum, (int)originalWindowLevel));
+
+                // 触发更新
+                OnOriginalWindowLevelChanged(sender, e);
+
+                logger.Info($"原图窗宽窗位已重置: 窗宽={originalWindowWidth:F1}, 窗位={originalWindowLevel:F1}");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"原图窗宽窗位重置失败: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region 增强图1窗宽窗位事件处理
+
+        private void OnEnhanced1WindowLevelChanged(object sender, EventArgs e)
+        {
+            if (enhancedImage == null || enhancedImage.Empty()) return;
+
+            try
+            {
+                // 更新标签显示
+                enhanced1WindowWidthLabel.Text = $"窗宽: {enhanced1WindowWidthTrackBar.Value}";
+                enhanced1WindowLevelLabel.Text = $"窗位: {enhanced1WindowLevelTrackBar.Value}";
+
+                // 更新存储的窗宽窗位值
+                enhancedWindowWidth = enhanced1WindowWidthTrackBar.Value;
+                enhancedWindowLevel = enhanced1WindowLevelTrackBar.Value;
+
+                // 重新应用窗宽窗位并更新显示
+                enhancedPictureBox.Image?.Dispose();
+                enhancedPictureBox.Image = ConvertMatToBitmapWithWindowLevel(enhancedImage, enhancedWindowWidth, enhancedWindowLevel, enhanced1Inverted);
+
+                logger.Info($"增强图1窗宽窗位调整: 窗宽={enhancedWindowWidth:F1}, 窗位={enhancedWindowLevel:F1}");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"增强图1窗宽窗位调整失败: {ex.Message}");
+            }
+        }
+
+        private void OnEnhanced1ResetWindowLevel(object sender, EventArgs e)
+        {
+            if (enhancedImage == null || enhancedImage.Empty()) return;
+
+            try
+            {
+                // 重新提取原始窗宽窗位
+                string extension = Path.GetExtension(enhancedImageFileName).ToLower();
+                if (extension == ".dcm" || extension == ".dic" || extension == ".acr")
+                {
+                    var dicomFile = DicomFile.Open(enhancedImageFileName);
+                    (enhancedWindowWidth, enhancedWindowLevel) = ExtractWindowLevelFromDicom(dicomFile, enhancedImage);
+                }
+                else
+                {
+                    // 非DICOM图像使用默认值（工业X射线图像）
+                    enhancedWindowWidth = 32768.0;
+                    enhancedWindowLevel = 32768.0;
+                }
+
+                // 更新滑动条
+                enhanced1WindowWidthTrackBar.Value = Math.Max(enhanced1WindowWidthTrackBar.Minimum,
+                    Math.Min(enhanced1WindowWidthTrackBar.Maximum, (int)enhancedWindowWidth));
+                enhanced1WindowLevelTrackBar.Value = Math.Max(enhanced1WindowLevelTrackBar.Minimum,
+                    Math.Min(enhanced1WindowLevelTrackBar.Maximum, (int)enhancedWindowLevel));
+
+                // 触发更新
+                OnEnhanced1WindowLevelChanged(sender, e);
+
+                logger.Info($"增强图1窗宽窗位已重置: 窗宽={enhancedWindowWidth:F1}, 窗位={enhancedWindowLevel:F1}");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"增强图1窗宽窗位重置失败: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region 增强图2窗宽窗位事件处理
+
+        private void OnEnhanced2WindowLevelChanged(object sender, EventArgs e)
+        {
+            if (enhanced2Image == null || enhanced2Image.Empty()) return;
+
+            try
+            {
+                // 更新标签显示
+                enhanced2WindowWidthLabel.Text = $"窗宽: {enhanced2WindowWidthTrackBar.Value}";
+                enhanced2WindowLevelLabel.Text = $"窗位: {enhanced2WindowLevelTrackBar.Value}";
+
+                // 更新存储的窗宽窗位值
+                enhanced2WindowWidth = enhanced2WindowWidthTrackBar.Value;
+                enhanced2WindowLevel = enhanced2WindowLevelTrackBar.Value;
+
+                // 重新应用窗宽窗位并更新显示
+                enhanced2PictureBox.Image?.Dispose();
+                enhanced2PictureBox.Image = ConvertMatToBitmapWithWindowLevel(enhanced2Image, enhanced2WindowWidth, enhanced2WindowLevel, enhanced2Inverted);
+
+                logger.Info($"增强图2窗宽窗位调整: 窗宽={enhanced2WindowWidth:F1}, 窗位={enhanced2WindowLevel:F1}");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"增强图2窗宽窗位调整失败: {ex.Message}");
+            }
+        }
+
+        private void OnEnhanced2ResetWindowLevel(object sender, EventArgs e)
+        {
+            if (enhanced2Image == null || enhanced2Image.Empty()) return;
+
+            try
+            {
+                // 重新提取原始窗宽窗位
+                string extension = Path.GetExtension(enhanced2ImageFileName).ToLower();
+                if (extension == ".dcm" || extension == ".dic" || extension == ".acr")
+                {
+                    var dicomFile = DicomFile.Open(enhanced2ImageFileName);
+                    (enhanced2WindowWidth, enhanced2WindowLevel) = ExtractWindowLevelFromDicom(dicomFile, enhanced2Image);
+                }
+                else
+                {
+                    // 非DICOM图像使用默认值（工业X射线图像）
+                    enhanced2WindowWidth = 32768.0;
+                    enhanced2WindowLevel = 32768.0;
+                }
+
+                // 更新滑动条
+                enhanced2WindowWidthTrackBar.Value = Math.Max(enhanced2WindowWidthTrackBar.Minimum,
+                    Math.Min(enhanced2WindowWidthTrackBar.Maximum, (int)enhanced2WindowWidth));
+                enhanced2WindowLevelTrackBar.Value = Math.Max(enhanced2WindowLevelTrackBar.Minimum,
+                    Math.Min(enhanced2WindowLevelTrackBar.Maximum, (int)enhanced2WindowLevel));
+
+                // 触发更新
+                OnEnhanced2WindowLevelChanged(sender, e);
+
+                logger.Info($"增强图2窗宽窗位已重置: 窗宽={enhanced2WindowWidth:F1}, 窗位={enhanced2WindowLevel:F1}");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"增强图2窗宽窗位重置失败: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region 反相功能事件处理
+
+        private void OnOriginalInvertImage(object sender, EventArgs e)
+        {
+            if (originalImage == null || originalImage.Empty()) return;
+
+            try
+            {
+                originalInverted = !originalInverted;
+                originalInvertBtn.BackColor = originalInverted ? Color.LightBlue : SystemColors.Control;
+
+                // 重新应用窗宽窗位并更新显示
+                originalPictureBox.Image?.Dispose();
+                originalPictureBox.Image = ConvertMatToBitmapWithWindowLevel(originalImage, originalWindowWidth, originalWindowLevel, originalInverted);
+
+                logger.Info($"原图反相状态: {(originalInverted ? "已反相" : "正常")}");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"原图反相操作失败: {ex.Message}");
+            }
+        }
+
+        private void OnEnhanced1InvertImage(object sender, EventArgs e)
+        {
+            if (enhancedImage == null || enhancedImage.Empty()) return;
+
+            try
+            {
+                enhanced1Inverted = !enhanced1Inverted;
+                enhanced1InvertBtn.BackColor = enhanced1Inverted ? Color.LightBlue : SystemColors.Control;
+
+                // 重新应用窗宽窗位并更新显示
+                enhancedPictureBox.Image?.Dispose();
+                enhancedPictureBox.Image = ConvertMatToBitmapWithWindowLevel(enhancedImage, enhancedWindowWidth, enhancedWindowLevel, enhanced1Inverted);
+
+                logger.Info($"增强图1反相状态: {(enhanced1Inverted ? "已反相" : "正常")}");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"增强图1反相操作失败: {ex.Message}");
+            }
+        }
+
+        private void OnEnhanced2InvertImage(object sender, EventArgs e)
+        {
+            if (enhanced2Image == null || enhanced2Image.Empty()) return;
+
+            try
+            {
+                enhanced2Inverted = !enhanced2Inverted;
+                enhanced2InvertBtn.BackColor = enhanced2Inverted ? Color.LightBlue : SystemColors.Control;
+
+                // 重新应用窗宽窗位并更新显示
+                enhanced2PictureBox.Image?.Dispose();
+                enhanced2PictureBox.Image = ConvertMatToBitmapWithWindowLevel(enhanced2Image, enhanced2WindowWidth, enhanced2WindowLevel, enhanced2Inverted);
+
+                logger.Info($"增强图2反相状态: {(enhanced2Inverted ? "已反相" : "正常")}");
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"增强图2反相操作失败: {ex.Message}");
+            }
+        }
+
+        #endregion
     }
 }
