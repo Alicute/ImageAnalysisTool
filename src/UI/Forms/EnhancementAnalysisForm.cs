@@ -65,6 +65,9 @@ namespace ImageAnalysisTool.UI.Forms
         // 像素映射缓存 - 避免重复计算
         private Dictionary<string, Dictionary<int, int>> pixelMappingCache = new Dictionary<string, Dictionary<int, int>>();
 
+        // UI更新状态缓存 - 避免重复UI更新
+        private Dictionary<string, bool> uiUpdateCache = new Dictionary<string, bool>();
+
 
 
         // UI控件
@@ -1471,9 +1474,10 @@ namespace ImageAnalysisTool.UI.Forms
             enhanced1AnalysisResult = null;
             enhanced2AnalysisResult = null;
 
-            // 清空像素映射缓存
+            // 清空所有缓存
             pixelMappingCache.Clear();
-            logger.Info($"[综合对比] 已清空缓存");
+            uiUpdateCache.Clear();
+            logger.Info($"[综合对比] 已清空所有缓存（像素映射 + UI更新）");
 
             // 1. 原图 vs 增强图1
             if (originalImage != null && enhancedImage != null)
@@ -1537,41 +1541,52 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 显示对比分析结果（对比分析按钮）
+        /// 显示对比分析结果（对比分析按钮）- 优化版：串行+缓存
         /// </summary>
         private void DisplayComparisonAnalysisResults()
         {
             try
             {
-                Console.WriteLine($"[DisplayComparisonAnalysisResults] 开始 - 线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
-                
-                // 显示像素映射
+                var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                logger.Info($"[UI更新] 开始显示对比分析结果 - 线程ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+
+                // 串行显示像素映射，避免资源竞争
                 if (originalImage != null)
                 {
-                    Console.WriteLine($"[DisplayComparisonAnalysisResults] 显示原图像素映射...");
+                    var sw1 = System.Diagnostics.Stopwatch.StartNew();
                     DisplayPixelMappingForImages(originalImage, originalImage, originalPixelMappingChart, "原图 vs 原图");
+                    sw1.Stop();
+                    logger.Info($"[UI更新] 原图像素映射完成 - 耗时: {sw1.ElapsedMilliseconds}ms");
                 }
+
                 if (originalImage != null && enhancedImage != null)
                 {
-                    Console.WriteLine($"[DisplayComparisonAnalysisResults] 显示增强图1像素映射...");
+                    var sw2 = System.Diagnostics.Stopwatch.StartNew();
                     DisplayPixelMappingForImages(originalImage, enhancedImage, enhanced1PixelMappingChart, "原图 vs 增强图1");
+                    sw2.Stop();
+                    logger.Info($"[UI更新] 增强图1像素映射完成 - 耗时: {sw2.ElapsedMilliseconds}ms");
                 }
+
                 if (originalImage != null && enhanced2Image != null)
                 {
-                    Console.WriteLine($"[DisplayComparisonAnalysisResults] 显示增强图2像素映射...");
+                    var sw3 = System.Diagnostics.Stopwatch.StartNew();
                     DisplayPixelMappingForImages(originalImage, enhanced2Image, enhanced2PixelMappingChart, "原图 vs 增强图2");
+                    sw3.Stop();
+                    logger.Info($"[UI更新] 增强图2像素映射完成 - 耗时: {sw3.ElapsedMilliseconds}ms");
                 }
 
                 // 显示对比分析报告
-                Console.WriteLine($"[DisplayComparisonAnalysisResults] 调用 DisplayComparisonReports...");
+                var reportStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 DisplayComparisonReports();
-                
-                Console.WriteLine($"[DisplayComparisonAnalysisResults] 完成");
+                reportStopwatch.Stop();
+                logger.Info($"[UI更新] 对比报告显示完成 - 耗时: {reportStopwatch.ElapsedMilliseconds}ms");
+
+                totalStopwatch.Stop();
+                logger.Info($"[UI更新] 对比分析结果显示完成 - 总耗时: {totalStopwatch.ElapsedMilliseconds}ms");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DisplayComparisonAnalysisResults] 异常: {ex.GetType().Name} - {ex.Message}");
-                Console.WriteLine($"[DisplayComparisonAnalysisResults] 堆栈跟踪: {ex.StackTrace}");
+                logger.Error(ex, $"[UI更新] 显示对比分析结果异常");
                 throw;
             }
         }
@@ -2043,12 +2058,24 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 显示像素映射关系（改进版：曲线+差值显示）
+        /// 显示像素映射关系（智能复用版：曲线+差值显示）
         /// </summary>
         private void DisplayPixelMappingForImages(Mat sourceImage, Mat targetImage, Chart chart, string title)
         {
             try
             {
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                // 生成UI缓存键
+                string uiCacheKey = $"{title}_{sourceImage.GetHashCode()}_{targetImage.GetHashCode()}";
+
+                // 检查是否需要更新UI
+                if (uiUpdateCache.ContainsKey(uiCacheKey) && uiUpdateCache[uiCacheKey])
+                {
+                    logger.Info($"[像素映射UI] 跳过重复更新 - {title}");
+                    return;
+                }
+
                 chart.Series.Clear();
                 chart.Legends.Clear();
 
@@ -2149,10 +2176,16 @@ namespace ImageAnalysisTool.UI.Forms
                 // 强制刷新图表
                 chart.Invalidate();
                 chart.Update();
+
+                // 标记UI已更新
+                uiUpdateCache[uiCacheKey] = true;
+
+                stopwatch.Stop();
+                logger.Info($"[像素映射UI] {title} 显示完成 - 耗时: {stopwatch.ElapsedMilliseconds}ms");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"显示像素映射时出错: {ex.Message}");
+                logger.Error(ex, $"[像素映射UI] 显示像素映射时出错: {title}");
                 // 在图表上显示错误信息
                 chart.Series.Clear();
                 chart.Titles.Clear();
@@ -2186,18 +2219,30 @@ namespace ImageAnalysisTool.UI.Forms
         }
 
         /// <summary>
-        /// 高性能多数投票算法收集映射数据（移植自Python版本）
-        /// 性能提升3-5倍，处理全部像素而非采样
+        /// 高性能多数投票算法收集映射数据（智能采样版）
+        /// 平衡精度和性能，采用智能采样策略
         /// </summary>
         private Dictionary<int, int> CollectMappingDataMajorityVoting(Mat sourceImage, Mat targetImage, bool is16Bit)
         {
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
             int totalPixels = sourceImage.Width * sourceImage.Height;
-            logger.Info($"[像素映射] 开始多数投票算法 - 图像尺寸: {sourceImage.Width}x{sourceImage.Height}, 总像素: {totalPixels:N0}, 位深: {(is16Bit ? "16位" : "8位")}");
 
-            int maxValue = is16Bit ? 65536 : 256; // 注意：这里是范围大小，不是最大值
+            // 智能采样策略：大图像采样，小图像全处理
+            int targetSamples = Math.Min(totalPixels, 2000000); // 最多处理200万像素
+            int step = (int)Math.Ceiling(Math.Sqrt((double)totalPixels / targetSamples));
+            step = Math.Max(1, step);
 
-            // 创建投票数组：每个输入值对应一个字典，记录输出值的投票次数
+            int actualPixels = 0;
+            for (int y = 0; y < sourceImage.Height; y += step)
+                for (int x = 0; x < sourceImage.Width; x += step)
+                    if (x < sourceImage.Width && y < sourceImage.Height)
+                        actualPixels++;
+
+            logger.Info($"[像素映射] 开始智能采样算法 - 图像尺寸: {sourceImage.Width}x{sourceImage.Height}, 采样步长: {step}, 处理像素: {actualPixels:N0}/{totalPixels:N0} ({(double)actualPixels/totalPixels*100:F1}%), 位深: {(is16Bit ? "16位" : "8位")}");
+
+            int maxValue = is16Bit ? 65536 : 256;
+
+            // 创建投票数组
             var initStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var votes = new Dictionary<int, int>[maxValue];
             for (int i = 0; i < maxValue; i++)
@@ -2207,51 +2252,53 @@ namespace ImageAnalysisTool.UI.Forms
             initStopwatch.Stop();
             logger.Info($"[像素映射] 投票数组初始化完成 - 耗时: {initStopwatch.ElapsedMilliseconds}ms");
 
-            // 获取图像数据指针，提升访问性能
-            int height = sourceImage.Height;
-            int width = sourceImage.Width;
-
-            // 逐像素投票统计（类似Python的zip遍历）
+            // 智能采样投票统计
             var voteStopwatch = System.Diagnostics.Stopwatch.StartNew();
             int processedPixels = 0;
 
             if (is16Bit)
             {
-                // 16位图像处理
-                for (int y = 0; y < height; y++)
+                // 16位图像处理 - 采样
+                for (int y = 0; y < sourceImage.Height; y += step)
                 {
-                    for (int x = 0; x < width; x++)
+                    for (int x = 0; x < sourceImage.Width; x += step)
                     {
-                        int sourceVal = sourceImage.Get<ushort>(y, x);
-                        int targetVal = targetImage.Get<ushort>(y, x);
+                        if (x < sourceImage.Width && y < sourceImage.Height)
+                        {
+                            int sourceVal = sourceImage.Get<ushort>(y, x);
+                            int targetVal = targetImage.Get<ushort>(y, x);
 
-                        var voteDict = votes[sourceVal];
-                        if (voteDict.ContainsKey(targetVal))
-                            voteDict[targetVal]++;
-                        else
-                            voteDict[targetVal] = 1;
+                            var voteDict = votes[sourceVal];
+                            if (voteDict.ContainsKey(targetVal))
+                                voteDict[targetVal]++;
+                            else
+                                voteDict[targetVal] = 1;
 
-                        processedPixels++;
+                            processedPixels++;
+                        }
                     }
                 }
             }
             else
             {
-                // 8位图像处理
-                for (int y = 0; y < height; y++)
+                // 8位图像处理 - 采样
+                for (int y = 0; y < sourceImage.Height; y += step)
                 {
-                    for (int x = 0; x < width; x++)
+                    for (int x = 0; x < sourceImage.Width; x += step)
                     {
-                        int sourceVal = sourceImage.Get<byte>(y, x);
-                        int targetVal = targetImage.Get<byte>(y, x);
+                        if (x < sourceImage.Width && y < sourceImage.Height)
+                        {
+                            int sourceVal = sourceImage.Get<byte>(y, x);
+                            int targetVal = targetImage.Get<byte>(y, x);
 
-                        var voteDict = votes[sourceVal];
-                        if (voteDict.ContainsKey(targetVal))
-                            voteDict[targetVal]++;
-                        else
-                            voteDict[targetVal] = 1;
+                            var voteDict = votes[sourceVal];
+                            if (voteDict.ContainsKey(targetVal))
+                                voteDict[targetVal]++;
+                            else
+                                voteDict[targetVal] = 1;
 
-                        processedPixels++;
+                            processedPixels++;
+                        }
                     }
                 }
             }

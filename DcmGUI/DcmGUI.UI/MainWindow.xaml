@@ -1,0 +1,167 @@
+﻿<Window x:Class="DcmGUI.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:DcmGUI.UI"
+        mc:Ignorable="d"
+        Title="DcmGUI - 图像处理工具" Height="700" Width="1200"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 菜单栏 -->
+        <Menu Grid.Row="0">
+            <MenuItem Header="文件(_F)">
+                <MenuItem Header="打开(_O)" Click="OpenImage_Click" InputGestureText="Ctrl+O"/>
+                <MenuItem Header="保存(_S)" Click="SaveImage_Click" InputGestureText="Ctrl+S"/>
+                <MenuItem Header="另存为(_A)" Click="SaveAsImage_Click" InputGestureText="Ctrl+Shift+S"/>
+                <Separator/>
+                <MenuItem Header="退出(_X)" Click="Exit_Click" InputGestureText="Alt+F4"/>
+            </MenuItem>
+            <MenuItem Header="编辑(_E)">
+                <MenuItem Header="撤销(_U)" Click="Undo_Click" InputGestureText="Ctrl+Z"/>
+                <MenuItem Header="重做(_R)" Click="Redo_Click" InputGestureText="Ctrl+Y"/>
+                <Separator/>
+                <MenuItem Header="重置(_Reset)" Click="Reset_Click"/>
+            </MenuItem>
+            <MenuItem Header="滤镜(_F)">
+                <MenuItem Header="模糊">
+                    <MenuItem Header="高斯模糊" Click="GaussianBlur_Click"/>
+                    <MenuItem Header="中值滤波" Click="MedianFilter_Click"/>
+                </MenuItem>
+                <MenuItem Header="增强">
+                    <MenuItem Header="亮度对比度" Click="BrightnessContrast_Click"/>
+                    <MenuItem Header="直方图均衡化" Click="HistogramEqualization_Click"/>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="帮助(_H)">
+                <MenuItem Header="关于(_A)" Click="About_Click"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- 工具栏 -->
+        <ToolBar Grid.Row="1">
+            <Button Click="OpenImage_Click" ToolTip="打开图像文件">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="📁" Margin="0,0,5,0"/>
+                    <TextBlock Text="打开"/>
+                </StackPanel>
+            </Button>
+            <Button Click="SaveImage_Click" ToolTip="保存图像">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="💾" Margin="0,0,5,0"/>
+                    <TextBlock Text="保存"/>
+                </StackPanel>
+            </Button>
+            <Separator/>
+            <Button Content="撤销" Click="Undo_Click" ToolTip="撤销上一步操作"/>
+            <Button Content="重做" Click="Redo_Click" ToolTip="重做操作"/>
+            <Separator/>
+            <Button Content="重置" Click="Reset_Click" ToolTip="重置到原始图像"/>
+            <Separator/>
+            <Button Content="适应窗口" Click="FitToWindow_Click" ToolTip="缩放图像适应窗口"/>
+            <Button Content="实际大小" Click="ActualSize_Click" ToolTip="显示图像实际大小"/>
+        </ToolBar>
+
+        <!-- 主内容区域 -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 功能面板 -->
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="5">
+                    <GroupBox Header="滤镜">
+                        <StackPanel>
+                            <Button Content="高斯模糊" Margin="2" Click="GaussianBlur_Click"
+                                    Background="LightBlue" BorderBrush="DarkBlue"/>
+                            <Button Content="中值滤波" Margin="2" Click="MedianFilter_Click"/>
+                            <Button Content="双边滤波" Margin="2" Click="BilateralFilter_Click"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox Header="图像增强">
+                        <StackPanel>
+                            <Button Content="亮度对比度" Margin="2" Click="BrightnessContrast_Click"/>
+                            <Button Content="直方图均衡化" Margin="2" Click="HistogramEqualization_Click"/>
+                            <Button Content="伽马校正" Margin="2" Click="GammaCorrection_Click"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox Header="DICOM专用">
+                        <StackPanel>
+                            <Button Content="自动窗宽窗位" Margin="2" Click="AutoWindowLevel_Click"
+                                    Background="LightGreen" BorderBrush="DarkGreen"/>
+                            <Button Content="重置窗宽窗位" Margin="2" Click="Reset_Click"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox Header="参数调节" x:Name="ParameterPanel">
+                        <StackPanel x:Name="ParameterControls">
+                            <TextBlock Text="选择滤镜后显示参数"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     Foreground="Gray"
+                                     Margin="10"/>
+                        </StackPanel>
+                    </GroupBox>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- 分隔符 -->
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                         Background="LightGray" ResizeBehavior="PreviousAndNext"/>
+
+            <!-- 图像显示区域 -->
+            <Border Grid.Column="2" Background="White" BorderBrush="Gray" BorderThickness="1">
+                <ScrollViewer x:Name="ImageScrollViewer"
+                             HorizontalScrollBarVisibility="Auto"
+                             VerticalScrollBarVisibility="Auto"
+                             Background="Transparent">
+                    <Grid>
+                        <Image x:Name="ImageDisplay"
+                               Stretch="None"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                        <TextBlock x:Name="NoImageText"
+                                  Text="请打开图像文件"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  FontSize="16"
+                                  Foreground="Gray"
+                                  Visibility="Visible"/>
+                    </Grid>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- 状态栏 -->
+        <StatusBar Grid.Row="3">
+            <StatusBarItem>
+                <TextBlock x:Name="ImageInfoText" Text="就绪"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock x:Name="ProcessingStatusText" Text=""/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock x:Name="ProcessingTimeText" Text=""/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <ProgressBar x:Name="ProcessingProgressBar"
+                           Width="100" Height="16"
+                           Visibility="Collapsed"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>
