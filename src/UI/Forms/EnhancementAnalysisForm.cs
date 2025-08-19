@@ -2208,8 +2208,8 @@ namespace ImageAnalysisTool.UI.Forms
                 return pixelMappingCache[cacheKey];
             }
 
-            // 计算新的映射数据
-            var result = CollectMappingDataMajorityVoting(sourceImage, targetImage, is16Bit);
+            // 计算新的映射数据 - 使用中位数算法
+            var result = CollectMappingDataMedianAlgorithm(sourceImage, targetImage, is16Bit);
 
             // 存入缓存
             pixelMappingCache[cacheKey] = result;
@@ -2367,6 +2367,205 @@ namespace ImageAnalysisTool.UI.Forms
             logger.Info($"[像素映射] 多数投票算法完成 - 结果映射点: {result.Count}, 总耗时: {totalStopwatch.ElapsedMilliseconds}ms");
 
             return result;
+        }
+
+        /// <summary>
+        /// 高性能中位数算法收集映射数据（优化版 - 只显示实际存在的像素值）
+        /// 只计算图像中实际存在的像素值映射，避免插值导致的"一坨"效果
+        /// </summary>
+        private Dictionary<int, int> CollectMappingDataMedianAlgorithm(Mat sourceImage, Mat targetImage, bool is16Bit)
+        {
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            int totalPixels = sourceImage.Width * sourceImage.Height;
+
+            // 智能采样策略：大图像采样，小图像全处理
+            int targetSamples = Math.Min(totalPixels, 2000000); // 最多处理200万像素
+            int step = (int)Math.Ceiling(Math.Sqrt((double)totalPixels / targetSamples));
+            step = Math.Max(1, step);
+
+            int actualPixels = 0;
+            for (int y = 0; y < sourceImage.Height; y += step)
+                for (int x = 0; x < sourceImage.Width; x += step)
+                    if (x < sourceImage.Width && y < sourceImage.Height)
+                        actualPixels++;
+
+            int maxValue = is16Bit ? 65535 : 255;
+            logger.Info($"[像素映射] 开始优化中位数算法 - 图像尺寸: {sourceImage.Width}x{sourceImage.Height}, 采样步长: {step}, 处理像素: {actualPixels:N0}/{totalPixels:N0} ({(double)actualPixels / totalPixels * 100:F1}%), 位深: {(is16Bit ? "16位" : "8位")}");
+
+            // 使用字典只记录实际存在的像素值
+            var valueLists = new Dictionary<int, List<int>>();
+            var voteStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            int processedPixels = 0;
+
+            for (int y = 0; y < sourceImage.Height; y += step)
+            {
+                for (int x = 0; x < sourceImage.Width; x += step)
+                {
+                    if (x < sourceImage.Width && y < sourceImage.Height)
+                    {
+                        int sourceVal = is16Bit ? sourceImage.Get<ushort>(y, x) : sourceImage.Get<byte>(y, x);
+                        int targetVal = is16Bit ? targetImage.Get<ushort>(y, x) : targetImage.Get<byte>(y, x);
+
+                        if (!valueLists.ContainsKey(sourceVal))
+                            valueLists[sourceVal] = new List<int>();
+                        
+                        valueLists[sourceVal].Add(targetVal);
+                        processedPixels++;
+                    }
+                }
+            }
+            voteStopwatch.Stop();
+            logger.Info($"[像素映射] 像素收集完成 - 处理像素: {processedPixels:N0}, 实际像素值种类: {valueLists.Count:N0}, 耗时: {voteStopwatch.ElapsedMilliseconds}ms, 速度: {processedPixels / Math.Max(1, voteStopwatch.ElapsedMilliseconds):N0} 像素/ms");
+
+            // 计算中位数映射关系（只针对实际存在的像素值）
+            var lutStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var result = new Dictionary<int, int>();
+            int validMappings = 0;
+
+            foreach (var kvp in valueLists.OrderBy(x => x.Key))
+            {
+                if (kvp.Value.Count > 0)
+                {
+                    // 计算中位数
+                    kvp.Value.Sort();
+                    int medianIndex = kvp.Value.Count / 2;
+                    result[kvp.Key] = kvp.Value[medianIndex];
+                    validMappings++;
+                }
+            }
+
+            lutStopwatch.Stop();
+            logger.Info($"[像素映射] 中位数计算完成 - 有效映射: {validMappings}, 耗时: {lutStopwatch.ElapsedMilliseconds}ms");
+
+            totalStopwatch.Stop();
+            logger.Info($"[像素映射] 优化中位数算法完成 - 结果映射点: {result.Count}, 总耗时: {totalStopwatch.ElapsedMilliseconds}ms");
+
+            return result;
+        }
+
+        /// <summary>
+        /// 生成完整LUT数组（改进版：多数投票+插值）
+        /// </summary>
+        /// <param name="sourceImage">源图像</param>
+        /// <param name="targetImage">目标图像</param>
+        /// <param name="is16Bit">是否为16位图像</param>
+        /// <returns>完整的65536项LUT数组</returns>
+        private ushort[] GenerateCompleteLUT(Mat sourceImage, Mat targetImage, bool is16Bit)
+        {
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            int totalPixels = sourceImage.Width * sourceImage.Height;
+
+            // 智能采样策略
+            int targetSamples = Math.Min(totalPixels, 2000000); // 最多处理200万像素
+            int step = (int)Math.Ceiling(Math.Sqrt((double)totalPixels / targetSamples));
+            step = Math.Max(1, step);
+
+            int actualPixels = 0;
+            for (int y = 0; y < sourceImage.Height; y += step)
+                for (int x = 0; x < sourceImage.Width; x += step)
+                    if (x < sourceImage.Width && y < sourceImage.Height)
+                        actualPixels++;
+
+            logger.Info($"[LUT生成] 开始完整LUT生成 - 图像尺寸: {sourceImage.Width}x{sourceImage.Height}, 采样步长: {step}, 处理像素: {actualPixels:N0}/{totalPixels:N0} ({(double)actualPixels/totalPixels*100:F1}%), 位深: {(is16Bit ? "16位" : "8位")}");
+
+            // 统计映射关系：原始值 -> 目标值的出现次数
+            var mapping = new Dictionary<int, Dictionary<int, int>>();
+            var voteStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            int processedPixels = 0;
+
+            if (is16Bit)
+            {
+                // 16位图像处理
+                for (int y = 0; y < sourceImage.Height; y += step)
+                {
+                    for (int x = 0; x < sourceImage.Width; x += step)
+                    {
+                        if (x < sourceImage.Width && y < sourceImage.Height)
+                        {
+                            int sourceVal = sourceImage.Get<ushort>(y, x);
+                            int targetVal = targetImage.Get<ushort>(y, x);
+
+                            if (!mapping.ContainsKey(sourceVal))
+                                mapping[sourceVal] = new Dictionary<int, int>();
+
+                            if (!mapping[sourceVal].ContainsKey(targetVal))
+                                mapping[sourceVal][targetVal] = 0;
+
+                            mapping[sourceVal][targetVal]++;
+                            processedPixels++;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // 8位图像处理
+                for (int y = 0; y < sourceImage.Height; y += step)
+                {
+                    for (int x = 0; x < sourceImage.Width; x += step)
+                    {
+                        if (x < sourceImage.Width && y < sourceImage.Height)
+                        {
+                            int sourceVal = sourceImage.Get<byte>(y, x);
+                            int targetVal = targetImage.Get<byte>(y, x);
+
+                            if (!mapping.ContainsKey(sourceVal))
+                                mapping[sourceVal] = new Dictionary<int, int>();
+
+                            if (!mapping[sourceVal].ContainsKey(targetVal))
+                                mapping[sourceVal][targetVal] = 0;
+
+                            mapping[sourceVal][targetVal]++;
+                            processedPixels++;
+                        }
+                    }
+                }
+            }
+
+            voteStopwatch.Stop();
+            logger.Info($"[LUT生成] 像素统计完成 - 处理像素: {processedPixels:N0}, 实际像素值种类: {mapping.Count:N0}, 耗时: {voteStopwatch.ElapsedMilliseconds}ms");
+
+            // 生成完整LUT
+            var lutStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            int maxValue = is16Bit ? 65536 : 256;
+            ushort[] lut = new ushort[maxValue];
+            ushort lastValidValue = 0;
+            int actualMappings = 0;
+
+            for (int i = 0; i < maxValue; i++)
+            {
+                if (mapping.ContainsKey(i))
+                {
+                    // 多数投票：选择出现次数最多的目标值
+                    ushort bestValue = 0;
+                    int maxCount = -1;
+
+                    foreach (var kvp in mapping[i])
+                    {
+                        if (kvp.Value > maxCount)
+                        {
+                            maxCount = kvp.Value;
+                            bestValue = (ushort)kvp.Key;
+                        }
+                    }
+
+                    lut[i] = bestValue;
+                    lastValidValue = bestValue;
+                    actualMappings++;
+                }
+                else
+                {
+                    // 插值：使用前一个有效值
+                    lut[i] = lastValidValue;
+                }
+            }
+
+            lutStopwatch.Stop();
+            totalStopwatch.Stop();
+
+            logger.Info($"[LUT生成] LUT生成完成 - 实际映射点: {actualMappings}, 插值点: {maxValue - actualMappings}, LUT耗时: {lutStopwatch.ElapsedMilliseconds}ms, 总耗时: {totalStopwatch.ElapsedMilliseconds}ms");
+
+            return lut;
         }
 
 
@@ -4256,8 +4455,8 @@ namespace ImageAnalysisTool.UI.Forms
             }
             sb.AppendLine();
 
-            // 算法参数推断
-            sb.AppendLine("【算法参数推断】");
+            // 算法参数推断（使用新的LUT算法）
+            sb.AppendLine("【算法参数推断（新LUT算法）】");
             try
             {
                 var analyzer = new ImageEnhancementAnalyzer();
@@ -4266,6 +4465,25 @@ namespace ImageAnalysisTool.UI.Forms
                 sb.AppendLine($"估计Gamma值: {enhancementAnalysis.GammaEstimate:F2}");
                 sb.AppendLine($"对比度变化率: {enhancementAnalysis.ContrastRatio:F2}x");
                 sb.AppendLine($"亮度变化: {enhancementAnalysis.BrightnessChange:+F1;-F1;0}%");
+                
+                // 新增LUT相关信息
+                if (!string.IsNullOrEmpty(enhancementAnalysis.LUTGenerationMethod))
+                {
+                    sb.AppendLine($"LUT生成方法: {enhancementAnalysis.LUTGenerationMethod}");
+                }
+                if (enhancementAnalysis.CompleteLUT != null)
+                {
+                    sb.AppendLine($"LUT数据点数: {enhancementAnalysis.CompleteLUT.Length:N0}");
+                    // 计算LUT的变化程度
+                    int changedPixels = 0;
+                    for (int i = 0; i < enhancementAnalysis.CompleteLUT.Length; i++)
+                    {
+                        if (enhancementAnalysis.CompleteLUT[i] != i)
+                            changedPixels++;
+                    }
+                    double changePercentage = (double)changedPixels / enhancementAnalysis.CompleteLUT.Length * 100;
+                    sb.AppendLine($"LUT变化程度: {changePercentage:F1}%");
+                }
 
                 if (enhancementAnalysis.EstimatedParameters.Count > 0)
                 {

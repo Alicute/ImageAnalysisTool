@@ -120,8 +120,7 @@ namespace ImageAnalysisTool.Core.Processors
                 int totalPixels = rows * cols;
                 
                 // 验证图像类型 - 必须是16位DICOM图像
-                bool is16Bit = original.Type() == MatType.CV_16UC1 || original.Type() == MatType.CV_16SC1;
-                if (!is16Bit)
+                if (original.Type() != MatType.CV_16UC1 && original.Type() != MatType.CV_16SC1)
                 {
                     throw new ArgumentException("只支持16位DICOM灰度图像，当前图像类型不符合要求");
                 }
@@ -294,13 +293,18 @@ namespace ImageAnalysisTool.Core.Processors
                     mapping[origKey].Add(targetValue);
                 }
 
-                // 计算每个原值的平均目标值
+                // 计算每个原值的中位数目标值
                 var result = new Dictionary<int, int>();
                 foreach (var kvp in mapping.OrderBy(kvp => kvp.Key))
                 {
                     if (kvp.Value.Count > 0)
                     {
-                        result[kvp.Key] = (int)kvp.Value.Average();
+                        var sortedValues = kvp.Value.OrderBy(v => v).ToList();
+                        int medianIndex = sortedValues.Count / 2;
+                        int medianValue = sortedValues.Count % 2 == 0 
+                            ? (sortedValues[medianIndex - 1] + sortedValues[medianIndex]) / 2
+                            : sortedValues[medianIndex];
+                        result[kvp.Key] = medianValue;
                     }
                 }
 
@@ -310,6 +314,78 @@ namespace ImageAnalysisTool.Core.Processors
             catch (Exception ex)
             {
                 logger.Error(ex, "分析像素映射规律失败");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 生成完整的LUT查找表（改进版：多数投票+插值）
+        /// </summary>
+        /// <param name="pixels">像素三元组列表</param>
+        /// <returns>完整的65536项LUT数组</returns>
+        public ushort[] GenerateCompleteLUT(List<PixelTriple> pixels)
+        {
+            if (pixels == null || pixels.Count == 0)
+                return new ushort[65536];
+
+            try
+            {
+                logger.Info($"开始生成完整LUT查找表 - 像素数: {pixels.Count:N0}");
+
+                // 统计映射关系：原始值 -> 目标值的出现次数
+                var mapping = new Dictionary<int, Dictionary<int, int>>();
+
+                foreach (var pixel in pixels)
+                {
+                    int origVal = pixel.OriginalValue;
+                    int targetVal = pixel.TargetValue;
+
+                    if (!mapping.ContainsKey(origVal))
+                        mapping[origVal] = new Dictionary<int, int>();
+
+                    if (!mapping[origVal].ContainsKey(targetVal))
+                        mapping[origVal][targetVal] = 0;
+
+                    mapping[origVal][targetVal]++;
+                }
+
+                // 生成完整LUT
+                ushort[] lut = new ushort[65536];
+                ushort lastValidValue = 0;
+
+                for (int i = 0; i < 65536; i++)
+                {
+                    if (mapping.ContainsKey(i))
+                    {
+                        // 多数投票：选择出现次数最多的目标值
+                        ushort bestValue = 0;
+                        int maxCount = -1;
+
+                        foreach (var kvp in mapping[i])
+                        {
+                            if (kvp.Value > maxCount)
+                            {
+                                maxCount = kvp.Value;
+                                bestValue = (ushort)kvp.Key;
+                            }
+                        }
+
+                        lut[i] = bestValue;
+                        lastValidValue = bestValue;
+                    }
+                    else
+                    {
+                        // 插值：使用前一个有效值
+                        lut[i] = lastValidValue;
+                    }
+                }
+
+                logger.Info($"完整LUT生成完成 - 实际映射点: {mapping.Count}, 插值点: {65536 - mapping.Count}");
+                return lut;
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "生成完整LUT失败");
                 throw;
             }
         }
@@ -496,8 +572,7 @@ namespace ImageAnalysisTool.Core.Processors
             try
             {
                 // 验证图像类型
-                bool is16Bit = input.Type() == MatType.CV_16UC1 || input.Type() == MatType.CV_16SC1;
-                if (!is16Bit)
+                if (input.Type() != MatType.CV_16UC1 && input.Type() != MatType.CV_16SC1)
                 {
                     throw new ArgumentException("只支持16位DICOM灰度图像，当前图像类型不符合要求");
                 }

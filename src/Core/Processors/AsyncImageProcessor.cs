@@ -84,8 +84,7 @@ namespace ImageAnalysisTool.Core.Processors
                 try
                 {
                     // 验证图像类型
-                    bool is16Bit = original.Type() == MatType.CV_16UC1 || original.Type() == MatType.CV_16SC1;
-                    if (!is16Bit)
+                    if (original.Type() != MatType.CV_16UC1 && original.Type() != MatType.CV_16SC1)
                     {
                         throw new ArgumentException("只支持16位DICOM灰度图像，当前图像类型不符合要求");
                     }

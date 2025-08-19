@@ -2,6 +2,7 @@ using OpenCvSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ImageAnalysisTool.Core.Processors;
 
 namespace ImageAnalysisTool.Core.Analyzers
 {
@@ -11,12 +12,20 @@ namespace ImageAnalysisTool.Core.Analyzers
     /// </summary>
     public class ImageEnhancementAnalyzer
     {
+        private readonly PixelProcessor pixelProcessor;
+        
+        public ImageEnhancementAnalyzer()
+        {
+            pixelProcessor = new PixelProcessor();
+        }
+        
         /// <summary>
         /// 分析结果数据结构
         /// </summary>
         public class AnalysisResult
         {
             public Dictionary<int, int> PixelMapping { get; set; } = new Dictionary<int, int>();
+            public ushort[] CompleteLUT { get; set; } // 完整的65536项LUT
             public double[] OriginalHistogram { get; set; }
             public double[] EnhancedHistogram { get; set; }
             public double ContrastRatio { get; set; }
@@ -25,6 +34,7 @@ namespace ImageAnalysisTool.Core.Analyzers
             public LocalEnhancementInfo LocalInfo { get; set; }
             public string SuggestedAlgorithm { get; set; }
             public Dictionary<string, double> EstimatedParameters { get; set; } = new Dictionary<string, double>();
+            public string LUTGenerationMethod { get; set; } // LUT生成方法说明
         }
 
         /// <summary>
@@ -49,8 +59,8 @@ namespace ImageAnalysisTool.Core.Analyzers
 
             var result = new AnalysisResult();
 
-            // 1. 像素映射分析
-            result.PixelMapping = AnalyzePixelMapping(original, enhanced);
+            // 1. 像素映射分析 - 使用新的LUT算法
+            AnalyzePixelMappingWithNewLUT(original, enhanced, result);
 
             // 2. 直方图分析
             (result.OriginalHistogram, result.EnhancedHistogram) = AnalyzeHistograms(original, enhanced);
@@ -71,50 +81,47 @@ namespace ImageAnalysisTool.Core.Analyzers
         }
 
         /// <summary>
-        /// 分析像素值映射关系
+        /// 使用新的LUT算法分析像素值映射关系
         /// </summary>
-        private Dictionary<int, int> AnalyzePixelMapping(Mat original, Mat enhanced)
+        private void AnalyzePixelMappingWithNewLUT(Mat original, Mat enhanced, AnalysisResult result)
         {
-            var mapping = new Dictionary<int, List<int>>();
+            // 智能采样策略
+            int totalPixels = original.Rows * original.Cols;
+            bool useSampling = totalPixels > 1000000; // 超过100万像素使用采样
+            int step = useSampling ? Math.Max(1, original.Rows / 100) : 1;
 
-            // 采样分析（避免处理所有像素）
-            int step = Math.Max(1, original.Rows / 100); // 采样步长
-
-            // 检测图像的实际位深
-            double minVal, maxVal;
-            Cv2.MinMaxLoc(original, out minVal, out maxVal);
-            bool is16Bit = maxVal > 255;
-
-            // 根据位深确定分组策略 - 16位使用较小的分组以保持更好的精度
-            int binSize = is16Bit ? 64 : 1; // 16位图像分组到1024个区间，8位图像不分组
-
+            // 收集像素数据
+            var pixels = new List<PixelTriple>();
             for (int y = 0; y < original.Rows; y += step)
             {
                 for (int x = 0; x < original.Cols; x += step)
                 {
-                    ushort origValue = original.At<ushort>(y, x);
-                    ushort enhValue = enhanced.At<ushort>(y, x);
-
-                    // 修复：保持更高精度的灰度值分组
-                    int origKey = is16Bit ? (origValue / binSize) * binSize : origValue; // 对16位图像进行精细分组
-                    int enhVal = enhValue; // 保持完整的增强后像素值
-
-                    if (!mapping.ContainsKey(origKey))
-                        mapping[origKey] = new List<int>();
-                    
-                    mapping[origKey].Add(enhVal);
+                    pixels.Add(new PixelTriple
+                    {
+                        Position = new System.Drawing.Point(x, y),
+                        OriginalValue = original.At<ushort>(y, x),
+                        TargetValue = enhanced.At<ushort>(y, x)
+                    });
                 }
             }
 
-            // 计算每个区间的平均映射值
-            var result = new Dictionary<int, int>();
-            foreach (var kvp in mapping)
+            // 使用新的LUT算法
+            var lutResult = pixelProcessor.GenerateCompleteLUT(pixels);
+            
+            // 设置结果
+            result.CompleteLUT = lutResult;
+            result.LUTGenerationMethod = "中位数+多数投票+插值";
+            
+            // 为了兼容性，同时生成简化的映射字典
+            result.PixelMapping = new Dictionary<int, int>();
+            int samplingInterval = 1024; // 每1024个值取一个样本点
+            for (int i = 0; i < 65536; i += samplingInterval)
             {
-                if (kvp.Value.Count > 0)
-                    result[kvp.Key] = (int)kvp.Value.Average();
+                if (lutResult[i] != i) // 只记录有变化的值
+                {
+                    result.PixelMapping[i] = lutResult[i];
+                }
             }
-
-            return result;
         }
 
         /// <summary>
@@ -126,9 +133,9 @@ namespace ImageAnalysisTool.Core.Analyzers
             double minVal, maxVal;
             Cv2.MinMaxLoc(original, out minVal, out maxVal);
 
-            // 如果最大值超过255，使用16位直方图；否则使用8位
-            int histSize = maxVal > 255 ? 65536 : 256;
-            float histRange = maxVal > 255 ? 65536f : 256f;
+            // 使用16位直方图
+            int histSize = 65536;
+            float histRange = 65536f;
 
             var origHist = new double[histSize];
             var enhHist = new double[histSize];
@@ -316,8 +323,46 @@ namespace ImageAnalysisTool.Core.Analyzers
             parameters["暗部增强倍数"] = result.LocalInfo.DarkRegionChange;
             parameters["中间调增强倍数"] = result.LocalInfo.MidRegionChange;
             parameters["亮部增强倍数"] = result.LocalInfo.BrightRegionChange;
+            
+            // 添加LUT相关参数
+            if (result.CompleteLUT != null)
+            {
+                // 计算LUT的非线性程度
+                double nonLinearity = CalculateLUTNonLinearity(result.CompleteLUT);
+                parameters["LUT非线性程度"] = nonLinearity;
+                
+                // 计算LUT的动态范围扩展
+                int origMin = 0, origMax = 65535;
+                int lutMin = result.CompleteLUT.Where(x => x > 0).Min();
+                int lutMax = result.CompleteLUT.Max();
+                double dynamicRangeExpansion = (double)(lutMax - lutMin) / (origMax - origMin);
+                parameters["动态范围扩展倍数"] = dynamicRangeExpansion;
+            }
 
             return parameters;
+        }
+        
+        /// <summary>
+        /// 计算LUT的非线性程度
+        /// </summary>
+        private double CalculateLUTNonLinearity(ushort[] lut)
+        {
+            if (lut == null || lut.Length == 0) return 0;
+            
+            // 计算LUT与线性映射的偏差
+            double totalDeviation = 0;
+            int samplePoints = Math.Min(1000, lut.Length); // 采样1000个点
+            int step = lut.Length / samplePoints;
+            
+            for (int i = 0; i < lut.Length; i += step)
+            {
+                double expectedLinear = i; // 线性映射应该等于输入值
+                double actual = lut[i];
+                double deviation = Math.Abs(actual - expectedLinear) / Math.Max(expectedLinear, 1);
+                totalDeviation += deviation;
+            }
+            
+            return totalDeviation / samplePoints;
         }
     }
 }
