@@ -11,14 +11,19 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="DcmGUI\**" />
+    <Compile Remove="tests\**" />
     <EmbeddedResource Remove="DcmGUI\**" />
     <None Remove="DcmGUI\**" />
+    <None Remove="tests\**" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="D.cs" />
   </ItemGroup>
+    <ItemGroup>
+    <Compile Remove="src\UI\Forms\EnhancementAnalysisForm.resx" />
+  </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Remove="src\UI\Forms\EnhancementAnalysisForm.resx" />
+    <EmbeddedResource Remove="tests\**" />
   </ItemGroup>
   <ItemGroup>
     <None Remove="config\NLog.config" />
